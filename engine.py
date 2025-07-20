@@ -1,8 +1,10 @@
-# engine.py
+# engine.py - Complete version with pause menu system
 import pygame
 import math
+import json
+import os
 from config import *
-from ui import draw_panel, draw_tabs, draw_log_panel, draw_equipment_panel, draw_inventory_panel, draw_text, draw_character_sheet_panel, draw_locations_panel, draw_quests_panel, draw_quest_details_window, draw_level_up_window, draw_item_options_window, draw_equipment_selection_window
+from ui import draw_panel, draw_tabs, draw_log_panel, draw_equipment_panel, draw_inventory_panel, draw_text, draw_character_sheet_panel, draw_locations_panel, draw_quests_panel, draw_quest_details_window, draw_level_up_window, draw_item_options_window, draw_equipment_selection_window, draw_pause_menu_window
 from world_generation import generate_overworld, Tile
 from entities import Monster, NPC, Player
 
@@ -24,6 +26,7 @@ class Game:
         self.quest_selected_index = 0
         self.item_options_selected_index = 0
         self.equip_selection_index = 0
+        self.pause_menu_selected_index = 0
         self.log_scroll_offset = 0
         self.quest_details_window = None
         
@@ -116,6 +119,75 @@ class Game:
             self.message_log.append((msg, color))
             self.log_scroll_offset = 0
 
+    def save_game(self, filename="savegame.json"):
+        """Saves the current game state to a JSON file."""
+        try:
+            # Create saves directory if it doesn't exist
+            if not os.path.exists("saves"):
+                os.makedirs("saves")
+            
+            save_data = {
+                "player": {
+                    "name": self.player.name,
+                    "archetype": self.player.archetype,
+                    "level": self.player.level,
+                    "xp": self.player.xp,
+                    "xp_to_next_level": self.player.xp_to_next_level,
+                    "hp": self.player.hp,
+                    "max_hp": self.player.max_hp,
+                    "gold": self.player.gold,
+                    "x": self.player.x,
+                    "y": self.player.y,
+                    "abilities": self.player.abilities,
+                    "known_locations": list(self.player.known_locations),
+                },
+                "map_info": {
+                    "current_map_type": "overworld" if not self.map_stack else "sub_map",
+                    "map_stack_depth": len(self.map_stack)
+                }
+            }
+            
+            filepath = os.path.join("saves", filename)
+            with open(filepath, 'w') as f:
+                json.dump(save_data, f, indent=2)
+            
+            return f"Game saved successfully!"
+        except Exception as e:
+            return f"Save failed: {str(e)}"
+
+    def load_game(self, filename="savegame.json"):
+        """Loads a game state from a JSON file."""
+        try:
+            filepath = os.path.join("saves", filename)
+            if not os.path.exists(filepath):
+                return "No save file found!"
+            
+            with open(filepath, 'r') as f:
+                save_data = json.load(f)
+            
+            # Restore player data
+            player_data = save_data["player"]
+            self.player.name = player_data["name"]
+            self.player.archetype = player_data["archetype"]
+            self.player.level = player_data["level"]
+            self.player.xp = player_data["xp"]
+            self.player.xp_to_next_level = player_data["xp_to_next_level"]
+            self.player.hp = player_data["hp"]
+            self.player.max_hp = player_data["max_hp"]
+            self.player.gold = player_data["gold"]
+            self.player.x = player_data["x"]
+            self.player.y = player_data["y"]
+            self.player.abilities = player_data["abilities"]
+            self.player.update_modifiers()
+            self.player.known_locations = set(player_data["known_locations"])
+            
+            # For this basic implementation, we'll just reload the overworld
+            self.load_overworld()
+            
+            return "Game loaded successfully!"
+        except Exception as e:
+            return f"Load failed: {str(e)}"
+
     def draw_ui(self):
         # Right Panel
         draw_tabs(self.screen, self.right_panel_tabs_rect, self.panel_tabs, self.active_panel, self.font, self.input_focus == 'panel')
@@ -179,7 +251,7 @@ class Game:
         self.screen.blit(self.game_surface, self.game_rect.topleft)
         
         if self.game_state == 'show_quest_details' and self.quest_details_window:
-            quest_rect = pygame.Rect(0,0, 500, 300)
+            quest_rect = pygame.Rect(0,0, 500, 350)
             quest_rect.center = self.screen.get_rect().center
             draw_quest_details_window(self.screen, quest_rect, self.quest_details_window, self.font)
         
@@ -191,7 +263,7 @@ class Game:
         if self.game_state == 'show_item_options':
             item = self.player.display_inventory[self.inventory_selected_index]
             options = ["Use", "Drop"]
-            item_options_rect = pygame.Rect(0,0, 200, 150)
+            item_options_rect = pygame.Rect(0,0, 250, 200)
             item_options_rect.center = self.screen.get_rect().center
             draw_item_options_window(self.screen, item_options_rect, item, options, self.item_options_selected_index, self.font)
 
@@ -199,10 +271,15 @@ class Game:
             slot = list(self.player.equipment.keys())[self.equipment_selected_index]
             items = [item for item in self.player.inventory if item.equip_slot == slot]
             
-            height = 100 + (len(items) * 60)
+            height = 150 + (len(items) * 60)
             equip_rect = pygame.Rect(0,0, 350, height)
             equip_rect.center = self.screen.get_rect().center
             draw_equipment_selection_window(self.screen, equip_rect, items, self.equip_selection_index, self.font)
+
+        if self.game_state == 'pause_menu':
+            pause_rect = pygame.Rect(0, 0, 300, 280)
+            pause_rect.center = self.screen.get_rect().center
+            draw_pause_menu_window(self.screen, pause_rect, self.pause_menu_selected_index, self.font)
 
         pygame.display.flip()
 
@@ -211,7 +288,12 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
             if event.type == pygame.KEYDOWN:
-                # Handle pop-up states first
+                # Handle pause menu first
+                if self.game_state == 'pause_menu':
+                    self.handle_pause_menu_input(event.key)
+                    return
+                
+                # Handle other pop-up states
                 if self.game_state == 'level_up':
                     if event.key == pygame.K_RETURN: self.game_state = 'playing'
                     return
@@ -226,12 +308,14 @@ class Game:
                     self.handle_equip_selection_input(event.key)
                     return
 
+                # Main game escape handling - open pause menu instead of quitting
                 if event.key == pygame.K_ESCAPE:
                     if self.game_state == 'looking':
                         self.game_state = 'playing'
                         self.add_message("You stop looking around.")
-                    else:
-                        self.running = False
+                    elif self.game_state == 'playing':
+                        self.game_state = 'pause_menu'
+                        self.pause_menu_selected_index = 0
                 
                 if event.key == pygame.K_TAB:
                     if self.input_focus == 'world': self.input_focus = 'log'
@@ -259,6 +343,34 @@ class Game:
                             self.add_message("You look around. (ENTER to interact)", COLOR_SELECTED)
                         else:
                             self.add_message("You stop looking around.")
+
+    def handle_pause_menu_input(self, key):
+        """Handles input for the pause menu."""
+        pause_options = ["Resume", "Save Game", "Load Game", "Quit to Title"]
+        
+        if key == pygame.K_UP:
+            self.pause_menu_selected_index = max(0, self.pause_menu_selected_index - 1)
+        elif key == pygame.K_DOWN:
+            self.pause_menu_selected_index = min(len(pause_options) - 1, self.pause_menu_selected_index + 1)
+        elif key == pygame.K_ESCAPE:
+            # Close pause menu and return to game
+            self.game_state = 'playing'
+        elif key == pygame.K_RETURN:
+            selected_option = pause_options[self.pause_menu_selected_index]
+            
+            if selected_option == "Resume":
+                self.game_state = 'playing'
+            elif selected_option == "Save Game":
+                message = self.save_game()
+                self.add_message(message, COLOR_GOLD)
+                self.game_state = 'playing'
+            elif selected_option == "Load Game":
+                message = self.load_game()
+                self.add_message(message, COLOR_GOLD)
+                self.game_state = 'playing'
+            elif selected_option == "Quit to Title":
+                # This will exit the game loop and return to title screen
+                self.running = False
 
     def handle_panel_input(self, key):
         """Handles input when the side panel is focused."""
@@ -335,7 +447,6 @@ class Game:
             item_to_equip = items[self.equip_selection_index]
             self.add_message(self.player.equip(item_to_equip))
             self.game_state = 'playing'
-
 
     def handle_interaction(self):
         x, y = self.look_cursor

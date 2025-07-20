@@ -100,15 +100,19 @@ def generate_dungeon(width, height):
     return game_map, player_start, entities, []
 
 
+# Updated generate_village function for world_generation.py
+
 def generate_village(width, height):
-    """Generates a small village map with a central square."""
+    """Generates a small village map with a central square and specific buildings."""
     game_map = np.full((width, height), fill_value=None, order='F')
     entities = []
     
+    # Create grass base
     for x in range(width):
         for y in range(height):
             game_map[x, y] = Tile(False, ' ', COLOR_GRASS, "grass")
 
+    # Create forest border
     for x in range(width):
         game_map[x, 0] = Tile(True, DENSE_TREE_CHAR, COLOR_GRASS, "forest", glyph_color=COLOR_FOREST)
         game_map[x, height - 1] = Tile(True, DENSE_TREE_CHAR, COLOR_GRASS, "forest", glyph_color=COLOR_FOREST)
@@ -116,33 +120,96 @@ def generate_village(width, height):
         game_map[0, y] = Tile(True, DENSE_TREE_CHAR, COLOR_GRASS, "forest", glyph_color=COLOR_FOREST)
         game_map[width - 1, y] = Tile(True, DENSE_TREE_CHAR, COLOR_GRASS, "forest", glyph_color=COLOR_FOREST)
 
+    # Create central town square
     square_x, square_y = width // 2, height // 2
     for i in range(-1, 2):
         for j in range(-1, 2):
             game_map[square_x + i, square_y + j] = Tile(False, ' ', COLOR_PATH, "town square")
-            
-    serpent_quest = Quest("The Serpent Temple", "Investigate the strange happenings at the temple.", ["Find the temple", "Defeat the priestess"])
-    entities.append(NPC(square_x, square_y, "Elder Maeve", "The Serpent Temple stirs... Please help us!", quest=serpent_quest))
-
+    
+    # Define specific building locations and details
+    specific_buildings = [
+        {
+            "name": "The Salty Siren",
+            "description": "a cozy inn",
+            "glyph": "\uee18",  # 0xee18
+            "position": (square_x - 8, square_y - 5),
+            "npc": None
+        },
+        {
+            "name": "Torvin's Smithy", 
+            "description": "a busy smithy",
+            "glyph": "\uf27c",  # 0xf27c
+            "position": (square_x + 8, square_y - 3),
+            "npc": NPC(square_x + 8, square_y - 2, "Torvin the Smith", "Welcome to my smithy! I can craft and repair weapons and armor.")
+        },
+        {
+            "name": "The Elder's Hut",
+            "description": "the elder's dwelling", 
+            "glyph": "\ueed7",  # 0xeed7
+            "position": (square_x - 3, square_y + 8),
+            "npc": None  # Elder Maeve will be placed in the square
+        }
+    ]
+    
     building_doors = []
-    for _ in range(5):
-        bx, by = random.randint(3, width - 4), random.randint(3, height - 4)
-        if abs(bx - square_x) < 5 and abs(by - square_y) < 5: continue
+    
+    # Place specific buildings
+    for building in specific_buildings:
+        bx, by = building["position"]
+        
+        # Ensure building is within map bounds
+        if 2 <= bx <= width - 3 and 2 <= by <= height - 3:
+            # Place the building
+            game_map[bx, by] = Tile(True, building["glyph"], COLOR_BUILDING, building["description"], glyph_color=COLOR_BROWN)
             
-        game_map[bx, by] = Tile(True, BUILDING_CHAR, COLOR_BUILDING, "a building")
-        door_x, door_y = bx, by + 1
-        if door_y < height -1:
-            game_map[door_x, door_y] = Tile(False, ' ', COLOR_GRASS, "grass")
-            building_doors.append((door_x, door_y))
+            # Create door in front of building
+            door_x, door_y = bx, by + 1
+            if door_y < height - 1:
+                game_map[door_x, door_y] = Tile(False, ' ', COLOR_GRASS, "grass")
+                building_doors.append((door_x, door_y))
+            
+            # Add NPC if specified
+            if building["npc"]:
+                # Adjust NPC position to be near the door
+                npc = building["npc"]
+                npc.x, npc.y = door_x, door_y
+                entities.append(npc)
+    
+    # Add a few more random buildings to fill out the village
+    for _ in range(3):
+        placed = False
+        attempts = 0
+        while not placed and attempts < 50:
+            attempts += 1
+            bx, by = random.randint(5, width - 6), random.randint(5, height - 6)
+            
+            # Make sure it's not too close to the square or existing buildings
+            if abs(bx - square_x) < 6 and abs(by - square_y) < 6:
+                continue
+                
+            # Check if position is clear
+            if game_map[bx, by].name == "grass":
+                game_map[bx, by] = Tile(True, BUILDING_CHAR, COLOR_BUILDING, "a building")
+                door_x, door_y = bx, by + 1
+                if door_y < height - 1:
+                    game_map[door_x, door_y] = Tile(False, ' ', COLOR_GRASS, "grass")
+                    building_doors.append((door_x, door_y))
+                placed = True
 
+    # Create exit
     exit_x, exit_y = 1, height // 2
     game_map[exit_x, exit_y] = Tile(False, EXIT_CHAR, COLOR_GATEWAY, "path to the wilderness")
     game_map[exit_x, exit_y].is_exit = True
     
+    # Create paths from buildings to town square and from square to exit
     for door_x, door_y in building_doors:
         _create_path(game_map, door_x, door_y, square_x, square_y)
         
     _create_path(game_map, square_x, square_y, exit_x, exit_y)
+
+    # Place Elder Maeve in the town square with her quest
+    serpent_quest = Quest("The Serpent Temple", "Investigate the strange happenings at the temple.", ["Find the temple", "Defeat the priestess"])
+    entities.append(NPC(square_x, square_y, "Elder Maeve", "The Serpent Temple stirs... Please help us!", quest=serpent_quest))
 
     player_start = (exit_x + 1, exit_y)
     

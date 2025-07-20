@@ -1,0 +1,29 @@
+{
+  "player": {
+    "name": "Player",
+    "archetype": "Warrior",
+    "level": 1,
+    "xp": 0,
+    "xp_to_next_level": 2000,
+    "hp": 9,
+    "max_hp": 9,
+    "gold": 25,
+    "x": 21,
+    "y": 27,
+    "abilities": {
+      "STR": 14,
+      "DEX": 13,
+      "CON": 9,
+      "INT": 8,
+      "WIS": 5,
+      "CHA": 4
+    },
+    "known_locations": [
+      "Saltwind Village"
+    ]
+  },
+  "map_info": {
+    "current_map_type": "sub_map",
+    "map_stack_depth": 1
+  }
+}

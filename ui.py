@@ -1,9 +1,9 @@
-# ui.py
+# ui.py - Complete version with consistent styling
 import pygame
 from config import *
 
 def draw_text(surface, text, x, y, font, color=COLOR_WHITE, bg_color=None, center=False, max_width=None):
-    """Renders text, now with word-wrapping capabilities."""
+    """Renders text, now with word-wrapping capabilities and returns number of lines rendered."""
     words = text.split(' ')
     lines = []
     current_line = ""
@@ -14,23 +14,28 @@ def draw_text(surface, text, x, y, font, color=COLOR_WHITE, bg_color=None, cente
             if font.size(test_line)[0] < max_width:
                 current_line = test_line
             else:
-                lines.append(current_line)
+                if current_line:  # Don't append empty lines
+                    lines.append(current_line.rstrip())
                 current_line = word + " "
-        lines.append(current_line)
+        if current_line:  # Don't forget the last line
+            lines.append(current_line.rstrip())
     else:
         lines.append(text)
 
     y_offset = 0
     for line in lines:
-        text_surface = font.render(line, True, color, bg_color)
-        text_rect = text_surface.get_rect()
-        if center:
-            text_rect.centerx = x
-        else:
-            text_rect.left = x
-        text_rect.top = y + y_offset
-        surface.blit(text_surface, text_rect)
+        if line:  # Only render non-empty lines
+            text_surface = font.render(line, True, color, bg_color)
+            text_rect = text_surface.get_rect()
+            if center:
+                text_rect.centerx = x
+            else:
+                text_rect.left = x
+            text_rect.top = y + y_offset
+            surface.blit(text_surface, text_rect)
         y_offset += font.get_height()
+    
+    return len(lines)  # Return the number of lines actually rendered
 
 def draw_bar(surface, x, y, width, height, value, max_value, bar_color, back_color):
     """Draws a status bar (for HP, XP, etc.)."""
@@ -44,6 +49,9 @@ def draw_panel(surface, rect, header=None, font=None, border_color=COLOR_WHITE):
     """Draws a standard panel with an optional header."""
     pygame.draw.rect(surface, COLOR_BLACK, rect)
     pygame.draw.rect(surface, border_color, rect, 2)
+    if header and font:
+        header_y = rect.top - font.get_height() - 5
+        draw_text(surface, header, rect.centerx, header_y, font, COLOR_WHITE, center=True)
 
 def draw_tabs(surface, rect, tabs, active_tab, font, has_focus):
     """Draws dynamic, rectangular ICON tabs."""
@@ -75,17 +83,59 @@ def draw_tabs(surface, rect, tabs, active_tab, font, has_focus):
         x_offset += tab_width
 
 def draw_log_panel(surface, rect, message_log, scroll_offset, font, has_focus):
-    """Draws the new scrollable log panel at the bottom."""
+    """Draws the new scrollable log panel at the bottom with proper text wrapping."""
     border_color = COLOR_FOCUS_BORDER if has_focus else COLOR_WHITE
     draw_panel(surface, rect, "Log", font, border_color)
     
-    y = rect.bottom - font.get_height() - 5
+    # Start from the bottom and work our way up
+    y = rect.bottom - 5
+    messages_displayed = 0
+    
+    # Calculate available width for text (minus padding)
+    text_width = rect.width - 10
+    
+    # Go through messages in reverse order (newest first)
     for i in range(len(message_log) - 1 - scroll_offset, -1, -1):
-        msg, color = message_log[i]
-        draw_text(surface, msg, rect.left + 5, y, font, color, max_width=rect.width - 10)
-        y -= font.get_height() * (1 + msg.count('\n'))
-        if y < rect.top:
+        if messages_displayed >= len(message_log):
             break
+            
+        msg, color = message_log[i]
+        
+        # Calculate how many lines this message will take
+        words = msg.split(' ')
+        lines = []
+        current_line = ""
+        
+        for word in words:
+            test_line = current_line + word + " "
+            if font.size(test_line)[0] < text_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line.rstrip())
+                current_line = word + " "
+        if current_line:
+            lines.append(current_line.rstrip())
+        
+        # Calculate the total height needed for this message
+        message_height = len(lines) * font.get_height()
+        
+        # Check if we have room for this message
+        if y - message_height < rect.top + 5:
+            break
+        
+        # Move up to make room for this message
+        y -= message_height
+        
+        # Render each line of the message
+        line_y = y
+        for line in lines:
+            if line and line_y >= rect.top + 5:  # Make sure we're within bounds
+                text_surface = font.render(line, True, color)
+                surface.blit(text_surface, (rect.left + 5, line_y))
+            line_y += font.get_height()
+        
+        messages_displayed += 1
 
 def draw_equipment_panel(surface, rect, player, selected_index, font):
     """Draws the player's equipped items with stats."""
@@ -148,7 +198,6 @@ def draw_character_sheet_panel(surface, rect, player, font):
     # Gold
     draw_text(surface, f"{GOLD_ICON}: {player.gold}", rect.left + 10, rect.bottom - 40, font, COLOR_GOLD)
 
-
 def draw_locations_panel(surface, rect, player, font):
     """Draws the locations the player has discovered."""
     y_offset = 20
@@ -166,40 +215,62 @@ def draw_quests_panel(surface, rect, player, selected_index, font):
 
 def draw_quest_details_window(surface, rect, quest, font):
     """Draws a pop-up window with the details of a quest."""
-    overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
-    surface.blit(overlay, (0,0))
-
-    draw_panel(surface, rect, header=quest.name, font=font)
-    draw_text(surface, quest.description, rect.left + 15, rect.top + 30, font, COLOR_WHITE, max_width=rect.width - 30)
+    draw_panel(surface, rect, "Quest Details", font, COLOR_WHITE)
+    
+    # Quest name
+    draw_text(surface, quest.name, rect.centerx, rect.top + 20, font, COLOR_GOLD, center=True)
+    
+    # Quest description
+    draw_text(surface, quest.description, rect.left + 15, rect.top + 60, font, COLOR_WHITE, max_width=rect.width - 30)
+    
+    # Objectives
+    y_offset = 120
+    draw_text(surface, "Objectives:", rect.left + 15, rect.top + y_offset, font, COLOR_GREY)
+    y_offset += 30
+    
+    for objective, completed in quest.objectives.items():
+        status = "[X]" if completed else "[ ]"
+        color = COLOR_GREEN if completed else COLOR_WHITE
+        draw_text(surface, f"{status} {objective}", rect.left + 25, rect.top + y_offset, font, color)
+        y_offset += 25
+    
+    # Instructions
+    draw_text(surface, "Press ESC to close", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
 
 def draw_level_up_window(surface, rect, font):
     """Draws the level up confirmation window."""
-    overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
-    surface.blit(overlay, (0,0))
-    draw_panel(surface, rect, header="Level Up!", font=font)
-    draw_text(surface, "You feel stronger!", rect.centerx, rect.centery - 20, font, center=True)
-    draw_text(surface, "Press ENTER to continue", rect.centerx, rect.centery + 20, font, COLOR_GREY, center=True)
+    draw_panel(surface, rect, "Level Up!", font, COLOR_GOLD)
+    
+    draw_text(surface, "You feel stronger!", rect.centerx, rect.centery - 20, font, COLOR_GOLD, center=True)
+    draw_text(surface, "Your abilities have improved!", rect.centerx, rect.centery, font, COLOR_WHITE, center=True)
+    draw_text(surface, "Press ENTER to continue", rect.centerx, rect.centery + 30, font, COLOR_GREY, center=True)
 
 def draw_item_options_window(surface, rect, item, options, selected_index, font):
     """Draws the options for an inventory item."""
-    overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
-    surface.blit(overlay, (0,0))
-    draw_panel(surface, rect, header=item.name, font=font)
+    draw_panel(surface, rect, item.name, font, COLOR_WHITE)
+    
+    # Item description if available
+    if hasattr(item, 'description') and item.description:
+        draw_text(surface, item.description, rect.left + 10, rect.top + 20, font, COLOR_GREY, max_width=rect.width - 20)
+        y_start = rect.top + 70
+    else:
+        y_start = rect.top + 30
+    
+    # Options
     for i, option in enumerate(options):
         color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
-        draw_text(surface, option, rect.centerx, rect.top + 30 + i * 40, font, color, center=True)
+        draw_text(surface, option, rect.centerx, y_start + i * 30, font, color, center=True)
+    
+    # Instructions
+    draw_text(surface, "ESC to cancel", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
 
 def draw_equipment_selection_window(surface, rect, items, selected_index, font):
     """Draws a list of equippable items with their stats."""
-    overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
-    surface.blit(overlay, (0,0))
-    draw_panel(surface, rect, header="Choose Item to Equip", font=font)
+    draw_panel(surface, rect, "Choose Item to Equip", font, COLOR_WHITE)
+    
     if not items:
         draw_text(surface, "Nothing to equip.", rect.centerx, rect.centery, font, COLOR_GREY, center=True)
+        draw_text(surface, "Press ESC to cancel", rect.centerx, rect.centery + 30, font, COLOR_GREY, center=True)
     else:
         y_offset = 30
         for i, item in enumerate(items):
@@ -214,5 +285,30 @@ def draw_equipment_selection_window(surface, rect, items, selected_index, font):
                 stat_str += f"+{item.bonuses['attack']} ATK "
             if item.bonuses.get('ac', 0) > 0:
                 stat_str += f"+{item.bonuses['ac']} AC "
-            draw_text(surface, stat_str, rect.centerx, rect.top + y_offset, font, COLOR_GREY, center=True)
+            if stat_str:
+                draw_text(surface, stat_str, rect.centerx, rect.top + y_offset, font, COLOR_GREY, center=True)
             y_offset += 35
+        
+        # Instructions
+        draw_text(surface, "ENTER to equip, ESC to cancel", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
+
+def draw_pause_menu_window(surface, rect, selected_index, font):
+    """Draws the pause menu with save/load/quit options."""
+    draw_panel(surface, rect, "Game Menu", font, COLOR_WHITE)
+    
+    # Menu options
+    options = ["Resume", "Save Game", "Load Game", "Quit to Title"]
+    
+    # Draw title
+    draw_text(surface, "Game Paused", rect.centerx, rect.top + 20, font, COLOR_WHITE, center=True)
+    
+    # Draw options
+    y_offset = 60
+    for i, option in enumerate(options):
+        color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
+        draw_text(surface, option, rect.centerx, rect.top + y_offset, font, color, center=True)
+        y_offset += 35
+    
+    # Draw instructions
+    draw_text(surface, "Use UP/DOWN to navigate", rect.centerx, rect.bottom - 45, font, COLOR_GREY, center=True)
+    draw_text(surface, "ENTER to select, ESC to close", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
