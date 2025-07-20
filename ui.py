@@ -1,4 +1,4 @@
-# ui.py - Complete version with consistent styling
+# ui.py - Complete version with enhanced spells panel
 import pygame
 from config import *
 
@@ -147,11 +147,11 @@ def draw_equipment_panel(surface, rect, player, selected_index, font):
         draw_text(surface, item_name, rect.left + 120, rect.top + y_offset, font, color)
         if item:
             stat_str = ""
-            if item.damage_dice:
+            if hasattr(item, 'damage_dice') and item.damage_dice:
                 stat_str += f"{item.damage_dice}d{item.damage_sides} "
-            if item.bonuses.get('attack', 0) > 0:
+            if hasattr(item, 'bonuses') and item.bonuses.get('attack', 0) > 0:
                 stat_str += f"+{item.bonuses['attack']} ATK "
-            if item.bonuses.get('ac', 0) > 0:
+            if hasattr(item, 'bonuses') and item.bonuses.get('ac', 0) > 0:
                 stat_str += f"+{item.bonuses['ac']} AC "
             draw_text(surface, stat_str, rect.left + 250, rect.top + y_offset, font, COLOR_GREY)
         y_offset += 30
@@ -159,7 +159,12 @@ def draw_equipment_panel(surface, rect, player, selected_index, font):
 def draw_inventory_panel(surface, rect, player, selected_index, font):
     """Draws the player's inventory (non-equipped items)."""
     y_offset = 20
-    for i, item in enumerate(player.display_inventory):
+    inventory = player.display_inventory
+    if not inventory:
+        draw_text(surface, "Inventory is empty", rect.centerx, rect.centery, font, COLOR_GREY, center=True)
+        return
+    
+    for i, item in enumerate(inventory):
         color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
         draw_text(surface, item.name, rect.left + 10, rect.top + y_offset, font, color)
         y_offset += 30
@@ -178,22 +183,31 @@ def draw_character_sheet_panel(surface, rect, player, font):
     y += 35
 
     draw_text(surface, "XP", rect.left + 10, y, font, COLOR_WHITE)
-    draw_bar(surface, rect.left + 50, y, rect.width - 60, font.get_height(), player.xp, player.xp_to_next_level, COLOR_XP_BAR, COLOR_GREY)
-    draw_text(surface, f"{player.xp}/{player.xp_to_next_level}", rect.centerx, y, font, COLOR_WHITE, center=True)
+    xp_to_next = player.xp_to_next_level
+    draw_bar(surface, rect.left + 50, y, rect.width - 60, font.get_height(), player.xp, xp_to_next, COLOR_XP_BAR, COLOR_GREY)
+    draw_text(surface, f"{player.xp}/{xp_to_next}", rect.centerx, y, font, COLOR_WHITE, center=True)
     y += 50
+
+    # CFE Saving Throws
+    draw_text(surface, f"Fortitude Save: +{player.fortitude_save}", rect.left + 10, y, font)
+    y += 25
+    draw_text(surface, f"Reflex Save: +{player.reflex_save}", rect.left + 10, y, font)
+    y += 25
+    draw_text(surface, f"Will Save: +{player.will_save}", rect.left + 10, y, font)
+    y += 35
 
     # Calculated Stats
     draw_text(surface, f"Attack Bonus: +{player.attack_bonus}", rect.left + 10, y, font)
-    y += 30
+    y += 25
     draw_text(surface, f"Armor Class: {player.ac}", rect.left + 10, y, font)
-    y += 50
+    y += 35
 
     # Core Abilities
     for stat, value in player.abilities.items():
         modifier = player.modifiers[stat]
         mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
         draw_text(surface, f"{stat}: {value} ({mod_str})", rect.left + 10, y, font)
-        y += 30
+        y += 25
         
     # Gold
     draw_text(surface, f"{GOLD_ICON}: {player.gold}", rect.left + 10, rect.bottom - 40, font, COLOR_GOLD)
@@ -201,17 +215,88 @@ def draw_character_sheet_panel(surface, rect, player, font):
 def draw_locations_panel(surface, rect, player, font):
     """Draws the locations the player has discovered."""
     y_offset = 20
-    for location in sorted(list(player.known_locations)):
+    locations = sorted(list(player.known_locations))
+    if not locations:
+        draw_text(surface, "No locations discovered", rect.centerx, rect.centery, font, COLOR_GREY, center=True)
+        return
+    
+    for location in locations:
         draw_text(surface, location, rect.left + 10, rect.top + y_offset, font)
         y_offset += 30
 
 def draw_quests_panel(surface, rect, player, selected_index, font):
     """Draws the list of active quests."""
     y_offset = 20
-    for i, quest_name in enumerate(sorted(player.quest_log.active_quests.keys())):
+    active_quests = sorted(player.quest_log.active_quests.keys())
+    if not active_quests:
+        draw_text(surface, "No active quests", rect.centerx, rect.centery, font, COLOR_GREY, center=True)
+        return
+    
+    for i, quest_name in enumerate(active_quests):
         color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
         draw_text(surface, quest_name, rect.left + 10, rect.top + y_offset, font, color)
         y_offset += 30
+
+def draw_spells_panel(surface, rect, player, selected_index, font):
+    """Enhanced spells panel with prepare and cast options."""
+    y_offset = 20
+    
+    if player.archetype != "Mage":
+        draw_text(surface, "No spells available", rect.centerx, rect.centery, font, COLOR_GREY, center=True)
+        return
+    
+    # Show spell slots
+    draw_text(surface, "Spell Slots:", rect.left + 10, rect.top + y_offset, font, COLOR_WHITE)
+    y_offset += 25
+    
+    for level in [1, 2, 3]:
+        current_slots = player.spell_slots.get(level, 0)
+        max_slots = player.max_spell_slots.get(level, 0)
+        if max_slots > 0:
+            slot_color = COLOR_BLUE if current_slots > 0 else COLOR_RED
+            draw_text(surface, f"Level {level}: {current_slots}/{max_slots}", rect.left + 20, rect.top + y_offset, font, slot_color)
+            y_offset += 20
+    
+    y_offset += 15
+    draw_text(surface, "Known Spells:", rect.left + 10, rect.top + y_offset, font, COLOR_WHITE)
+    y_offset += 25
+    
+    # Show known spells with enhanced status
+    if hasattr(player, 'known_spells'):
+        for i, spell_name in enumerate(player.known_spells):
+            color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
+            
+            # Check spell status
+            from spells import get_spell_by_name
+            spell = get_spell_by_name(spell_name)
+            if spell:
+                is_prepared = spell_name in player.prepared_spells.get(spell.level, [])
+                has_slots = player.spell_slots.get(spell.level, 0) > 0
+                
+                # Status indicators
+                if is_prepared and has_slots:
+                    prefix = "[READY] "
+                    spell_color = COLOR_GREEN
+                elif is_prepared and not has_slots:
+                    prefix = "[NO SLOTS] "
+                    spell_color = COLOR_RED
+                elif not is_prepared:
+                    prefix = "[UNPREPARED] "
+                    spell_color = COLOR_GREY
+                else:
+                    prefix = ""
+                    spell_color = color
+                
+                # Use selection color if this spell is selected
+                display_color = color if i == selected_index else spell_color
+                
+                draw_text(surface, f"{prefix}{spell_name}", rect.left + 20, rect.top + y_offset, font, display_color)
+                y_offset += 25
+    
+    # Enhanced instructions
+    draw_text(surface, "ENTER to prepare/unprepare", rect.left + 10, rect.bottom - 80, font, COLOR_GREY)
+    draw_text(surface, "C to cast selected spell", rect.left + 10, rect.bottom - 60, font, COLOR_BLUE)
+    draw_text(surface, "Press R to rest", rect.left + 10, rect.bottom - 40, font, COLOR_GREY)
 
 def draw_quest_details_window(surface, rect, quest, font):
     """Draws a pop-up window with the details of a quest."""
@@ -279,11 +364,11 @@ def draw_equipment_selection_window(surface, rect, items, selected_index, font):
             y_offset += 25
             
             stat_str = ""
-            if item.damage_dice:
+            if hasattr(item, 'damage_dice') and item.damage_dice:
                 stat_str += f"{item.damage_dice}d{item.damage_sides} "
-            if item.bonuses.get('attack', 0) > 0:
+            if hasattr(item, 'bonuses') and item.bonuses.get('attack', 0) > 0:
                 stat_str += f"+{item.bonuses['attack']} ATK "
-            if item.bonuses.get('ac', 0) > 0:
+            if hasattr(item, 'bonuses') and item.bonuses.get('ac', 0) > 0:
                 stat_str += f"+{item.bonuses['ac']} AC "
             if stat_str:
                 draw_text(surface, stat_str, rect.centerx, rect.top + y_offset, font, COLOR_GREY, center=True)
@@ -312,3 +397,33 @@ def draw_pause_menu_window(surface, rect, selected_index, font):
     # Draw instructions
     draw_text(surface, "Use UP/DOWN to navigate", rect.centerx, rect.bottom - 45, font, COLOR_GREY, center=True)
     draw_text(surface, "ENTER to select, ESC to close", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
+
+def draw_targeting_overlay(surface, rect, font):
+    """Draws targeting mode instructions."""
+    draw_panel(surface, rect, "Spell Targeting", font, COLOR_PURPLE)
+    
+    instructions = [
+        "Use arrow keys to aim",
+        "ENTER to cast spell",
+        "ESC to cancel targeting",
+        "",
+        "Red: Valid targets",
+        "Yellow: Area of effect", 
+        "Blue: Targeting cursor"
+    ]
+    
+    y_offset = 20
+    for instruction in instructions:
+        if instruction == "":
+            y_offset += 10
+        else:
+            color = COLOR_WHITE
+            if "Red:" in instruction:
+                color = (240, 72, 137)
+            elif "Yellow:" in instruction:
+                color = COLOR_GOLD
+            elif "Blue:" in instruction:
+                color = COLOR_BLUE
+                
+            draw_text(surface, instruction, rect.centerx, rect.top + y_offset, font, color, center=True)
+            y_offset += 25

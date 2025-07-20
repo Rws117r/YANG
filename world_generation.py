@@ -1,4 +1,4 @@
-# world_generation.py
+# world_generation.py - Updated for CFE monster system
 import noise
 import numpy as np
 import random
@@ -6,13 +6,13 @@ from config import *
 from entities import Monster, Crow, NPC
 from quest import Quest
 
-# --- MODIFICATION: Add missing color definitions to resolve NameError ---
+# Add missing color definitions
 COLOR_FLOWER_YELLOW = (255, 255, 0)
 COLOR_FLOWER_PINK = (255, 105, 180)
 COLOR_DUNGEON_WALL = (80, 80, 80)
 COLOR_DUNGEON_FLOOR = (40, 40, 40)
 
-# --- MODIFICATION: Override characters from config.py with Unicode glyphs ---
+# Unicode glyph overrides
 VILLAGE_CHAR = "\U000F0DD4"
 BUILDING_CHAR = "\U000F02DC"
 TOWER_CHAR = "\uE263"
@@ -30,7 +30,6 @@ MOUNTAIN_CHAR = "\uE2A6"
 TREASURE_CHEST_CHAR = "\U000F0726"
 DENSE_TREE_CHAR = "\U000F1897"
 
-
 class Tile:
     """A tile on the map. It may or may not be blocked."""
     def __init__(self, blocked, char=' ', color=COLOR_WHITE, name="tile", glyph_color=None):
@@ -39,10 +38,10 @@ class Tile:
         self.color = color
         self.name = name
         self.glyph_color = glyph_color
-        self.is_interactive = (name == "a chest") # Mark chests as interactive
+        self.is_interactive = (name == "a chest")
         self.explored = False
-        self.is_gateway_to = None # Links to a Place object
-        self.is_exit = False # Marks a tile as an exit back to a previous map
+        self.is_gateway_to = None
+        self.is_exit = False
 
 class Place:
     """Represents a significant location on the map, like a village or dungeon."""
@@ -64,8 +63,8 @@ def _create_path(game_map, x1, y1, x2, y2):
         if game_map[x2, y].name == "grass":
             game_map[x2, y] = Tile(False, ' ', COLOR_PATH, "a path")
 
-def generate_dungeon(width, height):
-    """Generates a simple dungeon map using a random walk algorithm."""
+def generate_cfe_dungeon(width, height):
+    """Generates a CFE dungeon with the 4 core monster types."""
     game_map = np.full((width, height), fill_value=Tile(True, ' ', COLOR_DUNGEON_WALL, "stone wall"))
     entities = []
     
@@ -75,6 +74,7 @@ def generate_dungeon(width, height):
     x, y = width // 2, height // 2
     game_map[x,y] = Tile(False, FLOOR_CHAR, COLOR_DUNGEON_FLOOR, "dungeon floor")
     
+    # Generate random dungeon layout
     for _ in range(max_tunnels):
         length = random.randint(1, max_length)
         dx, dy = random.choice([(0,1), (0,-1), (1,0), (-1,0)])
@@ -83,7 +83,7 @@ def generate_dungeon(width, height):
             if 1 <= x < width -1 and 1 <= y < height -1:
                 game_map[x,y] = Tile(False, FLOOR_CHAR, COLOR_DUNGEON_FLOOR, "dungeon floor")
             else:
-                break # Hit map edge
+                break
     
     # Add exit
     exit_x, exit_y = width // 2, height // 2
@@ -91,19 +91,32 @@ def generate_dungeon(width, height):
     game_map[exit_x, exit_y].is_exit = True
     player_start = (exit_x + 1, exit_y)
 
-    # Add monsters
-    for _ in range(10):
-        mx, my = random.randint(1, width-2), random.randint(1, height-2)
-        if game_map[mx, my].name == "dungeon floor":
-            entities.append(Monster(mx, my, 's', COLOR_SKELETON, "Skeleton", 13, 12, 2, 50))
+    # Place CFE monsters using template system
+    monster_types = ["Goblin", "Skeleton", "Ogre", "Giant Spider"]
+    monster_counts = {"Goblin": 6, "Skeleton": 4, "Ogre": 2, "Giant Spider": 3}
+    
+    floor_tiles = [(x, y) for x in range(width) for y in range(height) 
+                   if game_map[x, y].name == "dungeon floor" and (x, y) != player_start]
+    
+    for monster_type in monster_types:
+        count = monster_counts[monster_type]
+        for _ in range(count):
+            if floor_tiles:
+                mx, my = random.choice(floor_tiles)
+                floor_tiles.remove((mx, my))
+                entities.append(Monster(mx, my, monster_type))
+
+    # Add treasure chests
+    for _ in range(5):
+        if floor_tiles:
+            tx, ty = random.choice(floor_tiles)
+            floor_tiles.remove((tx, ty))
+            game_map[tx, ty] = Tile(False, TREASURE_CHEST_CHAR, COLOR_DUNGEON_FLOOR, "a chest", glyph_color=COLOR_GOLD)
 
     return game_map, player_start, entities, []
 
-
-# Updated generate_village function for world_generation.py
-
 def generate_village(width, height):
-    """Generates a small village map with a central square and specific buildings."""
+    """Generates a small village map with CFE-specific buildings."""
     game_map = np.full((width, height), fill_value=None, order='F')
     entities = []
     
@@ -262,7 +275,7 @@ def generate_overworld(width, height):
         "Lone Farmstead": {"count": 2, "terrain": ["grass"], "landmark": "tilled_earth", "gateway": FARMSTEAD_CHAR, "generator": None},
         "Bandit Camp": {"count": 3, "terrain": ["grass", "sand"], "landmark": "bandit_camp", "gateway": None, "generator": None},
         "Saltwind Village": {"count": 1, "terrain": ["grass"], "landmark": "farmland", "gateway": VILLAGE_CHAR, "generator": generate_village},
-        "Ancient Crypt": {"count": 2, "terrain": ["forest"], "landmark": "graveyard", "gateway": DUNGEON_ENTRANCE_CHAR, "generator": generate_dungeon},
+        "Ancient Crypt": {"count": 2, "terrain": ["forest"], "landmark": "graveyard", "gateway": DUNGEON_ENTRANCE_CHAR, "generator": generate_cfe_dungeon},
         "Mage Tower": {"count": 1, "terrain": ["forest"], "landmark": "corrupt_forest", "gateway": TOWER_CHAR, "generator": None},
         "Dragon's Lair": {"count": 1, "terrain": ["mountain"], "landmark": "scorched_earth", "gateway": LAIR_ENTRANCE_CHAR, "generator": None}
     }
@@ -281,16 +294,20 @@ def generate_overworld(width, height):
                         field_size = 3
                         for i in range(x - field_size - 1, x - 1):
                             for j in range(y - field_size - 1, y - 1):
-                                game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
+                                if 0 <= i < width and 0 <= j < height:
+                                    game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
                         for i in range(x + 2, x + field_size + 2):
                             for j in range(y - field_size - 1, y - 1):
-                                game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
+                                if 0 <= i < width and 0 <= j < height:
+                                    game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
                         for i in range(x - field_size - 1, x - 1):
                             for j in range(y + 2, y + field_size + 2):
-                                game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
+                                if 0 <= i < width and 0 <= j < height:
+                                    game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
                         for i in range(x + 2, x + field_size + 2):
                             for j in range(y + 2, y + field_size + 2):
-                                game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
+                                if 0 <= i < width and 0 <= j < height:
+                                    game_map[i,j] = Tile(False, TILLED_EARTH_CHAR, COLOR_TILLED_EARTH, "tilled earth", glyph_color=COLOR_BROWN)
                         for _ in range(random.randint(1,2)):
                             monsters.append(Crow(x + random.randint(-4,4), y + random.randint(-4,4)))
 
@@ -300,24 +317,33 @@ def generate_overworld(width, height):
                         
                         for i in range(-landmark_radius, landmark_radius + 1):
                             if not (opening_side == 'n' and i in [-1, 0, 1]):
-                                game_map[x+i, y-landmark_radius] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
+                                if 0 <= x+i < width and 0 <= y-landmark_radius < height:
+                                    game_map[x+i, y-landmark_radius] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
                             if not (opening_side == 's' and i in [-1, 0, 1]):
-                                game_map[x+i, y+landmark_radius] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
+                                if 0 <= x+i < width and 0 <= y+landmark_radius < height:
+                                    game_map[x+i, y+landmark_radius] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
                         for i in range(-landmark_radius + 1, landmark_radius):
                             if not (opening_side == 'w' and i in [-1, 0, 1]):
-                                game_map[x-landmark_radius, y+i] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
+                                if 0 <= x-landmark_radius < width and 0 <= y+i < height:
+                                    game_map[x-landmark_radius, y+i] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
                             if not (opening_side == 'e' and i in [-1, 0, 1]):
-                                game_map[x+landmark_radius, y+i] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
+                                if 0 <= x+landmark_radius < width and 0 <= y+i < height:
+                                    game_map[x+landmark_radius, y+i] = Tile(True, SPIKE_BARRIER_CHAR, COLOR_GRASS, "a spike barrier", glyph_color=COLOR_BLACK)
                         
                         game_map[x,y] = Tile(False, CAMPFIRE_CHAR, COLOR_GRASS, "a campfire", glyph_color=COLOR_RED)
-                        game_map[x, y-landmark_radius+1] = Tile(False, TREASURE_CHEST_CHAR, COLOR_GRASS, "a chest", glyph_color=COLOR_GOLD)
+                        if 0 <= x < width and 0 <= y-landmark_radius+1 < height:
+                            game_map[x, y-landmark_radius+1] = Tile(False, TREASURE_CHEST_CHAR, COLOR_GRASS, "a chest", glyph_color=COLOR_GOLD)
 
                         for _ in range(random.randint(2,3)):
                             tx, ty = x + random.randint(-landmark_radius+1, landmark_radius-1), y + random.randint(-landmark_radius+1, landmark_radius-1)
-                            if game_map[tx,ty].name == "grass":
+                            if 0 <= tx < width and 0 <= ty < height and game_map[tx,ty].name == "grass":
                                 game_map[tx,ty] = Tile(True, TENT_CHAR, COLOR_GRASS, "a crude tent", glyph_color=COLOR_BLACK)
+                        
+                        # Add CFE Goblins to bandit camps
                         for _ in range(random.randint(3,5)):
-                            monsters.append(Monster(x + random.randint(-landmark_radius+1, landmark_radius-1), y + random.randint(-landmark_radius+1, landmark_radius-1), 'b', COLOR_RED, "Bandit", 8, 12, 1, 20))
+                            mx, my = x + random.randint(-landmark_radius+1, landmark_radius-1), y + random.randint(-landmark_radius+1, landmark_radius-1)
+                            if 0 <= mx < width and 0 <= my < height:
+                                monsters.append(Monster(mx, my, "Goblin"))
 
                     else:
                         landmark_radius = random.randint(5, 8)
@@ -329,6 +355,11 @@ def generate_overworld(width, height):
                                         if definition["landmark"] == "graveyard":
                                             if random.random() < 0.1:
                                                 game_map[lx, ly] = Tile(False, GRAVESTONE_CHAR, COLOR_GRASS, "gravestone", glyph_color=COLOR_GRAVESTONE)
+                                        
+                                        # Add CFE Skeletons to graveyards
+                                        if definition["landmark"] == "graveyard" and random.random() < 0.05:
+                                            monsters.append(Monster(lx, ly, "Skeleton"))
+                    
                     if definition["gateway"]:
                         bg_color = game_map[x,y].color
                         glyph_color = COLOR_RED if name == "Lone Farmstead" else COLOR_GATEWAY
@@ -337,6 +368,24 @@ def generate_overworld(width, height):
                         game_map[x, y] = Tile(False, place.gateway_char, bg_color, f"entrance to {name}", glyph_color=glyph_color)
                         game_map[x, y].is_gateway_to = place
                     placed = True
+
+    # Add some CFE monsters to the wilderness
+    for _ in range(15):
+        mx, my = random.randint(5, width-5), random.randint(5, height-5)
+        if game_map[mx, my].name in ["grass", "forest"] and not game_map[mx, my].blocked:
+            monster_type = random.choice(["Goblin", "Giant Spider"])
+            monsters.append(Monster(mx, my, monster_type))
+
+    # Add some Ogres to mountain areas
+    for _ in range(5):
+        mx, my = random.randint(5, width-5), random.randint(5, height-5)
+        if game_map[mx, my].name == "mountain" and random.random() < 0.3:
+            # Place Ogre near mountain, not on it
+            for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
+                nx, ny = mx + dx, my + dy
+                if 0 <= nx < width and 0 <= ny < height and not game_map[nx, ny].blocked:
+                    monsters.append(Monster(nx, ny, "Ogre"))
+                    break
 
     # --- Step 3: Find Player Start ---
     player_start = (0,0)

@@ -1,4 +1,4 @@
-# config.py
+# config.py - Updated for Core Fantasy Engine
 import pygame
 
 # --- Screen and Display ---
@@ -29,6 +29,9 @@ COLOR_INACTIVE_TAB = (0, 0, 0) # Black for inactive tabs as well
 COLOR_FOCUS_BORDER = (255, 255, 0) # Yellow to show input focus
 COLOR_HP_BAR = (200, 0, 0) # Red for health
 COLOR_XP_BAR = (0, 200, 200) # Cyan for experience
+COLOR_GREEN = (0, 255, 0)
+COLOR_BLUE = (0, 0, 255)
+COLOR_PURPLE = (128, 0, 128)
 
 # --- World Tile Colors ---
 COLOR_DEEP_WATER = (0, 0, 100)
@@ -86,10 +89,173 @@ CHARACTER_SHEET_ICON = "\U000F0128"
 LOCATIONS_ICON = "\uEE69"
 GOLD_ICON = "\uE26B"
 
-
-# --- Archetype Data ---
+# --- CFE Archetype Data ---
 ARCHETYPES = {
-    "Warrior": { "hp_die": 10, "attack_bonus_start": 1, "proficiencies": "All weapons, all armor, shields" },
-    "Mage": { "hp_die": 4, "attack_bonus_start": 0, "proficiencies": "Dagger, staff" },
-    "Expert": { "hp_die": 6, "attack_bonus_start": 0, "proficiencies": "Light/medium armor, simple/ranged weapons" }
+    "Warrior": {
+        "hp_die": 10,
+        "attack_bonus_start": 1,
+        "proficiencies": "All weapons, all armor, shields",
+        "core_ability": "Power Attack"
+    },
+    "Mage": {
+        "hp_die": 4,
+        "attack_bonus_start": 0,
+        "proficiencies": "Simple weapons only",
+        "core_ability": "Spellcasting"
+    },
+    "Expert": {
+        "hp_die": 6,
+        "attack_bonus_start": 0,
+        "proficiencies": "Light/medium armor, simple/ranged weapons",
+        "core_ability": "Skill Expertise"
+    }
+}
+
+# --- CFE Equipment Categories ---
+WEAPON_CATEGORIES = {
+    "Simple Melee": {
+        "damage_dice": 1,
+        "damage_sides": 4,
+        "cost": 2,
+        "properties": [],
+        "item_type": "weapon",
+        "equip_slot": "Weapon"
+    },
+    "Light Melee": {
+        "damage_dice": 1,
+        "damage_sides": 6,
+        "cost": 10,
+        "properties": [],
+        "item_type": "weapon",
+        "equip_slot": "Weapon"
+    },
+    "Heavy Melee": {
+        "damage_dice": 1,
+        "damage_sides": 8,
+        "cost": 20,
+        "properties": ["two_handed"],
+        "item_type": "weapon",
+        "equip_slot": "Weapon"
+    },
+    "Light Ranged": {
+        "damage_dice": 1,
+        "damage_sides": 6,
+        "cost": 25,
+        "properties": ["two_handed"],
+        "item_type": "weapon",
+        "equip_slot": "Weapon"
+    },
+    "Heavy Ranged": {
+        "damage_dice": 1,
+        "damage_sides": 8,
+        "cost": 40,
+        "properties": ["two_handed", "slow"],
+        "item_type": "weapon",
+        "equip_slot": "Weapon"
+    }
+}
+
+ARMOR_CATEGORIES = {
+    "Light Armor": {
+        "ac_bonus": 2,  # Base AC 12 (10 + 2)
+        "cost": 20,
+        "properties": [],
+        "item_type": "armor",
+        "equip_slot": "Armor"
+    },
+    "Medium Armor": {
+        "ac_bonus": 4,  # Base AC 14 (10 + 4)
+        "cost": 50,
+        "properties": ["stealth_disadvantage"],
+        "item_type": "armor",
+        "equip_slot": "Armor"
+    },
+    "Heavy Armor": {
+        "ac_bonus": 6,  # Base AC 16 (10 + 6)
+        "cost": 100,
+        "properties": ["stealth_disadvantage"],
+        "item_type": "armor",
+        "equip_slot": "Armor"
+    },
+    "Shield": {
+        "ac_bonus": 1,
+        "cost": 10,
+        "properties": [],
+        "item_type": "armor",
+        "equip_slot": "Shield"
+    }
+}
+
+# --- CFE Monster Templates ---
+MONSTER_TEMPLATES = {
+    "Goblin": {
+        "name": "Goblin",
+        "char": "g",
+        "color": COLOR_GOBLIN,
+        "hp": 7,
+        "ac": 13,
+        "attack_bonus": 1,
+        "damage_dice": 1,
+        "damage_sides": 6,
+        "speed": 30,
+        "xp_value": 25,
+        "special_abilities": ["horde_tactics"]
+    },
+    "Skeleton": {
+        "name": "Skeleton",
+        "char": "s",
+        "color": COLOR_SKELETON,
+        "hp": 13,
+        "ac": 12,
+        "attack_bonus": 2,
+        "damage_dice": 1,
+        "damage_sides": 8,
+        "speed": 30,
+        "xp_value": 50,
+        "special_abilities": ["undead_nature", "blunt_vulnerability"]
+    },
+    "Ogre": {
+        "name": "Ogre",
+        "char": "O",
+        "color": COLOR_ORC,
+        "hp": 29,
+        "ac": 11,
+        "attack_bonus": 4,
+        "damage_dice": 2,
+        "damage_sides": 8,
+        "speed": 40,
+        "xp_value": 200,
+        "special_abilities": ["brute_strength"]
+    },
+    "Giant Spider": {
+        "name": "Giant Spider",
+        "char": "S",
+        "color": COLOR_BLACK,
+        "hp": 22,
+        "ac": 14,
+        "attack_bonus": 3,
+        "damage_dice": 1,
+        "damage_sides": 8,
+        "speed": 30,
+        "xp_value": 150,
+        "special_abilities": ["poison_bite"]
+    }
+}
+
+# --- CFE Unified Level Progression ---
+LEVEL_PROGRESSION = {
+    1: {"xp_required": 0},
+    2: {"xp_required": 2000},
+    3: {"xp_required": 4000},
+    4: {"xp_required": 8000},
+    5: {"xp_required": 16000}
+}
+
+# --- CFE Spell Slot Progression ---
+SPELL_SLOTS_BY_LEVEL = {
+    1: {1: 2, 2: 0, 3: 0},
+    2: {1: 3, 2: 0, 3: 0},
+    3: {1: 3, 2: 2, 3: 0},
+    4: {1: 3, 2: 3, 3: 0},
+    5: {1: 3, 2: 3, 3: 2}
 }
