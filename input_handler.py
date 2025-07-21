@@ -24,6 +24,14 @@ class InputHandler:
         elif self.game.game_state == 'level_up':
             if event.key == pygame.K_RETURN:
                 self.game.game_state = 'playing'
+        elif self.game.game_state == 'show_item_options':
+            self._handle_item_options_input(event.key)
+        elif self.game.game_state == 'select_item_to_equip':
+            self._handle_equip_selection_input(event.key)
+        elif self.game.game_state == 'show_quest_details':
+            if event.key == pygame.K_ESCAPE:
+                self.game.game_state = 'playing'
+                self.game.quest_details_window = None
         elif self.game.game_state == 'playing':
             self._handle_playing_input(event.key)
         elif self.game.game_state == 'looking':
@@ -62,6 +70,22 @@ class InputHandler:
         elif key == pygame.K_l:
             self.game.game_state = 'playing'
             self.game.add_message("You stop looking around.")
+        else:
+            # Handle look cursor movement with arrow keys
+            dx, dy = 0, 0
+            if key == pygame.K_UP: dy = -1
+            elif key == pygame.K_DOWN: dy = 1
+            elif key == pygame.K_LEFT: dx = -1
+            elif key == pygame.K_RIGHT: dx = 1
+            
+            if dx != 0 or dy != 0:
+                current_time = pygame.time.get_ticks()
+                if current_time - self.game.last_move_time > self.game.move_delay:
+                    new_x = max(0, min(self.game.map_width - 1, self.game.look_cursor[0] + dx))
+                    new_y = max(0, min(self.game.map_height - 1, self.game.look_cursor[1] + dy))
+                    self.game.look_cursor = (new_x, new_y)
+                    self._get_tile_info(new_x, new_y)
+                    self.game.last_move_time = current_time
     
     def _handle_targeting_input(self, key):
         """Handle input during spell targeting mode."""
@@ -216,6 +240,19 @@ class InputHandler:
         else:
             self.game.input_focus = 'world'
     
+    def _get_tile_info(self, x, y):
+        """Get information about a tile and display it."""
+        # Check for entities first
+        for entity in self.game.all_entities:
+            if entity.x == x and entity.y == y and entity is not self.game.player:
+                hp_info = f" ({entity.hp}/{getattr(entity, 'max_hp', entity.hp)} HP)" if hasattr(entity, 'hp') else ""
+                self.game.add_message(f"You see {entity.name}{hp_info}.", entity.color)
+                return
+        
+        # If no entity, show tile info
+        tile = self.game.game_map[x, y]
+        self.game.add_message(f"You see {tile.name}.", tile.color)
+
     def _handle_interaction(self):
         """Handle interaction at look cursor position."""
         x, y = self.game.look_cursor
@@ -398,3 +435,61 @@ class InputHandler:
         
         # Trigger monster turns
         self.game.monster_turns()
+
+    def _handle_item_options_input(self, key):
+        """Handle input for the item options pop-up."""
+        if not self.game.player.display_inventory:
+            self.game.game_state = 'playing'
+            return
+        
+        # Make sure we have a valid selection
+        if self.game.inventory_selected_index >= len(self.game.player.display_inventory):
+            self.game.game_state = 'playing'
+            return
+            
+        item_to_use = self.game.player.display_inventory[self.game.inventory_selected_index]
+        options = ["Use", "Drop"]
+        
+        if key == pygame.K_UP:
+            self.game.item_options_selected_index = max(0, self.game.item_options_selected_index - 1)
+        elif key == pygame.K_DOWN:
+            self.game.item_options_selected_index = min(len(options) - 1, self.game.item_options_selected_index + 1)
+        elif key == pygame.K_ESCAPE:
+            self.game.game_state = 'playing'
+        elif key == pygame.K_RETURN:
+            selected_option = options[self.game.item_options_selected_index]
+            print(f"[DEBUG] Using item option: {selected_option} on {item_to_use.name}")
+            
+            if selected_option == "Use":
+                result = self.game.player.use_item(item_to_use)
+                self.game.add_message(result, COLOR_WHITE)
+            elif selected_option == "Drop":
+                if item_to_use in self.game.player.inventory:
+                    self.game.player.inventory.remove(item_to_use)
+                    self.game.add_message(f"You drop the {item_to_use.name}.", COLOR_WHITE)
+                else:
+                    self.game.add_message("Item not found in inventory.", COLOR_RED)
+            
+            self.game.game_state = 'playing'
+
+    def _handle_equip_selection_input(self, key):
+        """Handle input for the equipment selection window."""
+        if self.game.equipment_selected_index >= len(self.game.player.equipment):
+            self.game.game_state = 'playing'
+            return
+            
+        slot = list(self.game.player.equipment.keys())[self.game.equipment_selected_index]
+        items = [item for item in self.game.player.inventory 
+                if hasattr(item, 'equip_slot') and item.equip_slot == slot]
+
+        if key == pygame.K_UP:
+            self.game.equip_selection_index = max(0, self.game.equip_selection_index - 1)
+        elif key == pygame.K_DOWN:
+            self.game.equip_selection_index = min(max(0, len(items) - 1), self.game.equip_selection_index + 1)
+        elif key == pygame.K_ESCAPE:
+            self.game.game_state = 'playing'
+        elif key == pygame.K_RETURN and items and self.game.equip_selection_index < len(items):
+            item_to_equip = items[self.game.equip_selection_index]
+            result = self.game.player.equip(item_to_equip)
+            self.game.add_message(result, COLOR_WHITE)
+            self.game.game_state = 'playing'

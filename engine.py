@@ -86,7 +86,8 @@ class Game:
         self.message_log = [
             ("Welcome to the Core Fantasy Engine!", COLOR_GOLD),
             ("Combat now has satisfying visual feedback!", COLOR_PURPLE),
-            ("Attack enemies to see flash and knockback effects!", COLOR_WHITE),
+            ("Attack enemies to see flash, knockback & screen shake!", COLOR_WHITE),
+            ("Each archetype has unique impact intensity!", COLOR_BLUE),
         ]
 
     def add_message(self, msg, color=COLOR_WHITE):
@@ -97,7 +98,7 @@ class Game:
             print(f"[GAME] {msg}")
 
     def trigger_hit_effects(self, target, attacker_archetype, attack_type=None, attacker_x=None, attacker_y=None):
-        """Trigger both hitstop and visual effects for a hit."""
+        """Trigger hitstop, visual effects, and screen shake for a hit."""
         print(f"[VFX] Hit effects on {getattr(target, 'name', 'target')}: {attacker_archetype}/{attack_type}")
         
         # Use attacker position or default to player position
@@ -112,6 +113,9 @@ class Game:
         # Add visual effects
         self.vfx_manager.add_flash_effect(target, 200)
         self.vfx_manager.add_knockback_effect(target, attacker_x, attacker_y, effect_type)
+        
+        # Add screen shake
+        self.vfx_manager.add_screen_shake(attacker_archetype, attack_type)
         
         # Trigger hitstop
         duration = get_hitstop_duration(effect_type)
@@ -272,6 +276,9 @@ class Game:
 
     def draw(self):
         """Draw the entire game."""
+        # Clear the entire screen first to prevent any artifacts
+        self.screen.fill(COLOR_BLACK)
+        
         self.renderer.draw_game(
             self.game_map, self.all_entities, self.player,
             self.map_width, self.map_height,
@@ -304,7 +311,36 @@ class Game:
             level_up_rect.center = self.screen.get_rect().center
             draw_level_up_window(self.screen, level_up_rect, self.font)
         
-        # Add other popup windows as needed...
+        elif self.game_state == 'show_item_options':
+            if self.player.display_inventory and self.inventory_selected_index < len(self.player.display_inventory):
+                item = self.player.display_inventory[self.inventory_selected_index]
+                options = ["Use", "Drop"]
+                item_options_rect = pygame.Rect(0, 0, 250, 200)
+                item_options_rect.center = self.screen.get_rect().center
+                draw_item_options_window(self.screen, item_options_rect, item, options, 
+                                       self.item_options_selected_index, self.font)
+        
+        elif self.game_state == 'select_item_to_equip':
+            if self.equipment_selected_index < len(self.player.equipment):
+                slot = list(self.player.equipment.keys())[self.equipment_selected_index]
+                items = [item for item in self.player.inventory 
+                        if hasattr(item, 'equip_slot') and item.equip_slot == slot]
+                
+                height = 150 + (len(items) * 60) if items else 150
+                equip_rect = pygame.Rect(0, 0, 350, height)
+                equip_rect.center = self.screen.get_rect().center
+                draw_equipment_selection_window(self.screen, equip_rect, items, 
+                                              self.equip_selection_index, self.font)
+        
+        elif self.game_state == 'show_quest_details' and self.quest_details_window:
+            quest_rect = pygame.Rect(0, 0, 500, 350)
+            quest_rect.center = self.screen.get_rect().center
+            draw_quest_details_window(self.screen, quest_rect, self.quest_details_window, self.font)
+        
+        elif self.game_state == 'pause_menu':
+            pause_rect = pygame.Rect(0, 0, 300, 280)
+            pause_rect.center = self.screen.get_rect().center
+            draw_pause_menu_window(self.screen, pause_rect, self.pause_menu_selected_index, self.font)
         
         pygame.display.flip()
 

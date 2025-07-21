@@ -121,6 +121,7 @@ class VisualEffectsManager:
     """Manages all visual effects for entities."""
     def __init__(self):
         self.entity_effects = {}
+        self.screen_shake = ScreenShakeManager()
     
     def add_flash_effect(self, entity, duration_ms=200):
         """Add a flash effect to an entity."""
@@ -152,8 +153,13 @@ class VisualEffectsManager:
         print(f"[VFX] {archetype} knockback (intensity {intensity}) added to {getattr(entity, 'name', 'entity')}")
         sys.stdout.flush()
     
+    def add_screen_shake(self, archetype, attack_type=None):
+        """Add a screen shake effect."""
+        self.screen_shake.add_shake(archetype, attack_type)
+    
     def update(self):
         """Update all effects and remove expired ones."""
+        # Update entity effects
         entities_to_remove = []
         
         for entity_id, effects in self.entity_effects.items():
@@ -166,6 +172,9 @@ class VisualEffectsManager:
         
         for entity_id in entities_to_remove:
             del self.entity_effects[entity_id]
+        
+        # Update screen shake
+        self.screen_shake.update()
     
     def get_flash_intensity(self, entity):
         """Get the flash intensity for an entity (0.0 to 1.0)."""
@@ -192,6 +201,14 @@ class VisualEffectsManager:
                 total_dy += dy
         
         return (total_dx, total_dy)
+    
+    def get_screen_shake_offset(self):
+        """Get the current screen shake offset."""
+        return self.screen_shake.get_total_shake_offset()
+    
+    def is_screen_shaking(self):
+        """Check if screen is currently shaking."""
+        return self.screen_shake.is_shaking()
 
 # Hitstop duration constants
 HITSTOP_WARRIOR = 120
@@ -231,6 +248,96 @@ def lerp_color(color1, color2, t):
     b = int(b1 + (b2 - b1) * t)
     
     return (r, g, b)
+
+class ScreenShakeEffect(VisualEffect):
+    """Screen shake effect with easing and intensity variation."""
+    def __init__(self, intensity=1.0, duration_ms=250):
+        super().__init__(duration_ms)
+        self.intensity = intensity
+        self.base_magnitude = intensity
+    
+    def get_shake_offset(self):
+        """Return current screen shake offset (dx, dy) in pixels."""
+        if not self.is_active:
+            return (0, 0)
+        
+        progress = self.get_progress()
+        
+        # Easing curve: start strong, fade out smoothly
+        # Using exponential decay for natural feel
+        ease_factor = (1.0 - progress) ** 2
+        current_magnitude = self.base_magnitude * ease_factor
+        
+        # Generate random shake in both directions
+        import random
+        shake_x = random.uniform(-current_magnitude, current_magnitude)
+        shake_y = random.uniform(-current_magnitude, current_magnitude)
+        
+        return (int(shake_x), int(shake_y))
+
+class ScreenShakeManager:
+    """Manages screen shake effects with intensity stacking."""
+    def __init__(self):
+        self.active_shakes = []
+    
+    def add_shake(self, archetype, attack_type=None):
+        """Add a screen shake effect based on archetype and attack type."""
+        # Intensity mapping for different archetypes and attacks
+        intensity_map = {
+            "Warrior": 9,      # Heavy shake (8-10 pixels)
+            "Expert": 5,       # Medium shake (4-6 pixels)  
+            "Mage": 3,         # Light shake (2-4 pixels)
+            "Monster": 4,      # Medium shake for monsters
+            "PowerAttack": 12, # Extra heavy for power attacks
+            "SneakAttack": 3,  # Light shake for stealth
+            "Fireball": 8,     # Heavy magical explosion
+            "MagicMissile": 2, # Very light for quick spell
+            "Default": 4
+        }
+        
+        # Get base intensity
+        if attack_type and attack_type in intensity_map:
+            intensity = intensity_map[attack_type]
+        else:
+            intensity = intensity_map.get(archetype, 4)
+        
+        # Duration based on intensity (heavier shakes last slightly longer)
+        duration = int(250 + (intensity * 10))  # 250-370ms range
+        
+        # Create shake effect
+        shake = ScreenShakeEffect(intensity, duration)
+        self.active_shakes.append(shake)
+        
+        print(f"[SCREEN SHAKE] Added {archetype}/{attack_type} shake: {intensity}px for {duration}ms")
+        sys.stdout.flush()
+    
+    def update(self):
+        """Update all shake effects and remove expired ones."""
+        self.active_shakes = [shake for shake in self.active_shakes if shake.update()]
+    
+    def get_total_shake_offset(self):
+        """Get combined shake offset from all active effects."""
+        total_x, total_y = 0, 0
+        
+        for shake in self.active_shakes:
+            shake_x, shake_y = shake.get_shake_offset()
+            total_x += shake_x
+            total_y += shake_y
+        
+        # Cap maximum shake to prevent excessive movement
+        max_shake = 15
+        total_x = max(-max_shake, min(max_shake, total_x))
+        total_y = max(-max_shake, min(max_shake, total_y))
+        
+        return (int(total_x), int(total_y))
+    
+    def is_shaking(self):
+        """Return True if any shake effects are active."""
+        return len(self.active_shakes) > 0
+    
+    def clear_all_shakes(self):
+        """Clear all active shake effects."""
+        self.active_shakes = []
 
 def apply_flash_to_color(original_color, flash_intensity):
     """Apply white flash effect to a color."""

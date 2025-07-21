@@ -15,7 +15,29 @@ class GameRenderer:
     
     def draw_game(self, game_map, all_entities, player, map_width, map_height, 
                   game_rect, is_frozen=False, **kwargs):
-        """Draw the main game world with visual effects."""
+        """Draw the main game world with visual effects and screen shake."""
+        # Get screen shake offset
+        shake_x, shake_y = self.vfx_manager.get_screen_shake_offset()
+        
+        # Create shaken game rect
+        shaken_rect = pygame.Rect(
+            game_rect.left + shake_x,
+            game_rect.top + shake_y, 
+            game_rect.width,
+            game_rect.height
+        )
+        
+        # IMPORTANT: Clear the original game area to prevent artifacts
+        # Fill a slightly larger area to account for shake movement
+        clear_margin = 20  # Extra pixels to clear around the game area
+        clear_rect = pygame.Rect(
+            game_rect.left - clear_margin,
+            game_rect.top - clear_margin,
+            game_rect.width + (clear_margin * 2),
+            game_rect.height + (clear_margin * 2)
+        )
+        pygame.draw.rect(self.screen, (0, 0, 0), clear_rect)  # Clear with black
+        
         self.game_surface.fill(COLOR_BLACK)
         
         # Calculate camera position
@@ -36,16 +58,32 @@ class GameRenderer:
         if kwargs.get('game_state') == 'looking' and not kwargs.get('targeting_mode', False):
             self._draw_look_cursor(kwargs.get('look_cursor'), cam_x, cam_y, game_rect)
         
-        # Draw game border with hitstop feedback
-        border_color = COLOR_WHITE if is_frozen else COLOR_FOCUS_BORDER
-        border_width = 4 if is_frozen else 2
-        pygame.draw.rect(self.screen, border_color, game_rect, border_width)
-        
-        # Blit game surface to main screen
-        self.screen.blit(self.game_surface, game_rect.topleft)
-        
-        # Draw hitstop indicator
+        # Draw game border with enhanced feedback
         if is_frozen:
+            border_color = COLOR_WHITE
+            border_width = 4
+        elif self.vfx_manager.is_screen_shaking():
+            border_color = COLOR_RED  # Red border during screen shake
+            border_width = 3
+        else:
+            border_color = COLOR_FOCUS_BORDER
+            border_width = 2
+        
+        pygame.draw.rect(self.screen, border_color, shaken_rect, border_width)
+        
+        # Blit game surface to shaken position
+        self.screen.blit(self.game_surface, shaken_rect.topleft)
+        
+        # Draw effect indicators
+        if is_frozen:
+            hitstop_text = "HITSTOP ACTIVE"
+            text_surface = self.font.render(hitstop_text, True, COLOR_WHITE)
+            self.screen.blit(text_surface, (shaken_rect.left + 10, shaken_rect.top + 10))
+        
+        if self.vfx_manager.is_screen_shaking():
+            shake_text = f"SCREEN SHAKE ({abs(shake_x) + abs(shake_y)}px)"
+            text_surface = self.font.render(shake_text, True, COLOR_RED)
+            self.screen.blit(text_surface, (shaken_rect.left + 10, shaken_rect.top + 30))
             hitstop_text = "HITSTOP ACTIVE"
             text_surface = self.font.render(hitstop_text, True, COLOR_WHITE)
             self.screen.blit(text_surface, (game_rect.left + 10, game_rect.top + 10))
