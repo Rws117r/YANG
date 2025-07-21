@@ -300,16 +300,22 @@ class InputHandler:
         spell = get_spell_by_name(spell_name)
         if not spell:
             self.game.add_message(f"Unknown spell: {spell_name}!", COLOR_RED)
+            if self.game.audio_manager:
+                self.game.audio_manager.play_error()
             return
         
         # Check if spell is prepared
         if spell_name not in self.game.player.prepared_spells.get(spell.level, []):
             self.game.add_message(f"{spell_name} is not prepared!", COLOR_RED)
+            if self.game.audio_manager:
+                self.game.audio_manager.play_error()
             return
         
         # Check if we have spell slots
         if self.game.player.spell_slots.get(spell.level, 0) <= 0:
             self.game.add_message("No spell slots remaining for that level!", COLOR_RED)
+            if self.game.audio_manager:
+                self.game.audio_manager.play_error()
             return
         
         # Handle different target types
@@ -317,6 +323,10 @@ class InputHandler:
             # Cast immediately on self
             result = self.game.player.cast_spell(spell_name, self.game.player, self.game)
             self.game.add_message(result, COLOR_PURPLE)
+            
+            # Play spell sound
+            if self.game.audio_manager:
+                self.game.audio_manager.play_spell_sound(spell_name)
             
             from game_systems import get_hitstop_duration
             self.game.hitstop_manager.freeze_game(get_hitstop_duration("Mage", spell_name))
@@ -456,6 +466,9 @@ class InputHandler:
             self.game.item_options_selected_index = min(len(options) - 1, self.game.item_options_selected_index + 1)
         elif key == pygame.K_ESCAPE:
             self.game.game_state = 'playing'
+            # Play cancel sound
+            if self.game.audio_manager:
+                self.game.audio_manager.play_error()
         elif key == pygame.K_RETURN:
             selected_option = options[self.game.item_options_selected_index]
             print(f"[DEBUG] Using item option: {selected_option} on {item_to_use.name}")
@@ -463,12 +476,24 @@ class InputHandler:
             if selected_option == "Use":
                 result = self.game.player.use_item(item_to_use)
                 self.game.add_message(result, COLOR_WHITE)
+                # Play item use sound
+                if self.game.audio_manager:
+                    if "healing" in result.lower():
+                        self.game.audio_manager.play_success()
+                    else:
+                        self.game.audio_manager.play_item_pickup()
+                        
             elif selected_option == "Drop":
                 if item_to_use in self.game.player.inventory:
                     self.game.player.inventory.remove(item_to_use)
                     self.game.add_message(f"You drop the {item_to_use.name}.", COLOR_WHITE)
+                    # Play drop sound (use error sound for negative action)
+                    if self.game.audio_manager:
+                        self.game.audio_manager.play_error()
                 else:
                     self.game.add_message("Item not found in inventory.", COLOR_RED)
+                    if self.game.audio_manager:
+                        self.game.audio_manager.play_error()
             
             self.game.game_state = 'playing'
 

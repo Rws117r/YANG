@@ -13,6 +13,8 @@ from game_systems import HitstopManager, VisualEffectsManager, get_hitstop_durat
 from rendering import GameRenderer
 from input_handler import InputHandler
 
+from audio_system import initialize_game_audio
+
 class Game:
     """Main game engine class - now cleaner and more focused."""
     
@@ -28,6 +30,16 @@ class Game:
         self.vfx_manager = VisualEffectsManager()
         self.renderer = GameRenderer(screen, font, self.vfx_manager)
         self.input_handler = InputHandler(self)
+        
+        # --- Audio System ---
+        self.audio_manager = initialize_game_audio()
+        if self.audio_manager:
+            print("[DEBUG] Audio system initialized successfully")
+            # Set audio manager reference for player
+            if hasattr(self.player, 'set_audio_manager'):
+                self.player.set_audio_manager(self.audio_manager)
+        else:
+            print("[DEBUG] Audio system failed to initialize - continuing without audio")
         
         print("[DEBUG] Core systems initialized")
         
@@ -87,7 +99,7 @@ class Game:
             ("Welcome to the Core Fantasy Engine!", COLOR_GOLD),
             ("Combat now has satisfying visual feedback!", COLOR_PURPLE),
             ("Attack enemies to see flash, knockback & screen shake!", COLOR_WHITE),
-            ("Each archetype has unique impact intensity!", COLOR_BLUE),
+            ("Each archetype has unique movement sounds!", COLOR_BLUE),
         ]
 
     def add_message(self, msg, color=COLOR_WHITE):
@@ -173,7 +185,7 @@ class Game:
         self.add_message("You return to the wilderness.", COLOR_GATEWAY)
 
     def player_move_or_attack(self, dx, dy):
-        """Handle player movement with bump-to-attack combat."""
+        """Handle player movement with bump-to-attack combat and contextual audio."""
         new_x, new_y = self.player.x + dx, self.player.y + dy
         if 0 <= new_x < self.map_width and 0 <= new_y < self.map_height:
             # Check for monster to attack
@@ -182,6 +194,10 @@ class Game:
             
             if target:
                 print(f"[COMBAT] Player attacking {target.name}")
+                
+                # Play attack sound based on archetype
+                if self.audio_manager:
+                    self.audio_manager.play_attack_sound(self.player.archetype)
                 
                 # Attack the monster
                 attack_result = self.player.attack(target)
@@ -206,14 +222,32 @@ class Game:
                     self.add_message(xp_msg, COLOR_GOLD)
                     if self.player.check_for_level_up():
                         self.game_state = 'level_up'
+                        # Play level up sound
+                        if self.audio_manager:
+                            self.audio_manager.play_level_up()
                 
             elif not self.game_map[new_x, new_y].blocked:
                 # Move to empty space
+                old_x, old_y = self.player.x, self.player.y
                 self.player.x, self.player.y = new_x, new_y
+                
+                # Play contextual movement audio based on terrain
+                if self.audio_manager:
+                    tile = self.game_map[new_x, new_y]
+                    if tile.name in ["deep water", "shallow water"]:
+                        self.audio_manager.play_contextual_movement('water')
+                
+                # Handle map transitions
                 tile = self.game_map[new_x, new_y]
                 if tile.is_gateway_to:
+                    # Play transition sound
+                    if self.audio_manager:
+                        self.audio_manager.play_area_transition()
                     self.change_map(tile.is_gateway_to)
                 elif tile.is_exit:
+                    # Play transition sound
+                    if self.audio_manager:
+                        self.audio_manager.play_area_transition()
                     self.return_to_previous_map()
 
     def monster_turns(self):
