@@ -1,4 +1,4 @@
-# entities.py - Updated for Core Fantasy Engine
+# entities.py - Updated for Core Fantasy Engine with hitstop integration
 import math
 import random
 from config import *
@@ -46,6 +46,10 @@ class Combatant(GameObject):
         self.restrained = False
         self.flying = False
         self.hasted = False
+        
+        # Combat state tracking
+        self.using_power_attack = False
+        self.last_attack_was_sneak = False
         
         self.update_modifiers()
 
@@ -152,14 +156,25 @@ class Combatant(GameObject):
         return total >= dc, total
 
     def attack(self, target):
-        """Attack using CFE Universal Resolution Mechanic."""
+        """Attack using CFE Universal Resolution Mechanic with hitstop support."""
         attack_roll = roll_dice(1, 20)
         total_attack = attack_roll + self.attack_bonus
+        
+        # Reset combat state flags
+        self.using_power_attack = False
+        self.last_attack_was_sneak = False
         
         if universal_resolution(attack_roll, self.attack_bonus - self.modifiers['STR'], self.modifiers['STR'], target.ac):
             # Calculate damage
             damage = self.calculate_damage()
             actual_damage = target.take_damage(damage)
+            
+            # Set flag for power attack detection (for hitstop)
+            if hasattr(self, 'archetype') and self.archetype == "Warrior":
+                # Check if this might be a power attack (simplified detection)
+                if damage > self.calculate_base_weapon_damage() * 1.5:
+                    self.using_power_attack = True
+            
             return f"{self.name} hits {target.name} for {actual_damage} damage!"
         else:
             return f"{self.name} misses {target.name}."
@@ -177,6 +192,15 @@ class Combatant(GameObject):
                 damage_bonus += weapon.bonuses.get('damage', 0)
         
         return max(1, base_damage + damage_bonus)
+
+    def calculate_base_weapon_damage(self):
+        """Calculate base weapon damage without rolling (for comparison)."""
+        if hasattr(self, 'equipment') and self.equipment.get("Weapon"):
+            weapon = self.equipment["Weapon"]
+            if hasattr(weapon, 'damage_dice'):
+                # Return average damage
+                return (weapon.damage_dice * (weapon.damage_sides + 1)) // 2
+        return 1
             
     def take_turn(self, target, game_map, all_combatants):
         """Default hostile AI: move towards player and attack within a certain range."""
@@ -201,7 +225,7 @@ class Combatant(GameObject):
         return None
 
 class Player(Combatant):
-    """The player character with CFE archetype abilities."""
+    """The player character with CFE archetype abilities and hitstop support."""
     def __init__(self, archetype, abilities):
         super().__init__(0, 0, '@', COLOR_PLAYER, 'Player')
         self.abilities = abilities
@@ -324,7 +348,7 @@ class Player(Combatant):
         """Check if player can level up."""
         return self.xp >= self.xp_to_next_level
 
-    # --- CFE Archetype Abilities ---
+    # --- CFE Archetype Abilities with Hitstop Support ---
     
     def power_attack(self, target):
         """Warrior's Power Attack: -2 to hit, double damage on hit."""
@@ -333,6 +357,9 @@ class Player(Combatant):
         
         attack_roll = roll_dice(1, 20)
         total_attack = attack_roll + self.attack_bonus - 2  # -2 penalty
+        
+        # Set power attack flag for hitstop
+        self.using_power_attack = True
         
         if total_attack >= target.ac:
             damage = self.calculate_damage() * 2  # Double damage
@@ -367,11 +394,31 @@ class Player(Combatant):
         
         # Check if conditions are met (simplified for MVP)
         if hasattr(target, 'sleeping') and target.sleeping:
+            self.last_attack_was_sneak = True
             return roll_dice(self.sneak_attack_dice, 6)
         if hasattr(target, 'surprised') and target.surprised:
+            self.last_attack_was_sneak = True
             return roll_dice(self.sneak_attack_dice, 6)
         
         return 0
+
+    def attack(self, target):
+        """Enhanced attack method with archetype-specific features and hitstop support."""
+        # Check for sneak attack first (Expert)
+        sneak_damage = 0
+        if self.archetype == "Expert":
+            sneak_damage = self.sneak_attack(target)
+        
+        # Perform base attack
+        attack_result = super().attack(target)
+        
+        # Add sneak attack damage if applicable
+        if sneak_damage > 0 and "hits" in attack_result:
+            # Extract damage from result and add sneak damage
+            target.take_damage(sneak_damage)
+            attack_result += f" Plus {sneak_damage} sneak attack damage!"
+        
+        return attack_result
 
     # --- CFE Magic System ---
     
@@ -398,7 +445,7 @@ class Player(Combatant):
         return f"Prepared {spell_name}!"
 
     def cast_spell(self, spell_name, target=None, game_engine=None):
-        """Cast a prepared spell using CFE magic system."""
+        """Cast a prepared spell using CFE magic system with hitstop support."""
         if self.archetype != "Mage":
             return "You cannot cast spells!"
         
@@ -492,7 +539,7 @@ class Player(Combatant):
         return f"You equip the {item.name}."
 
 class Monster(Combatant):
-    """CFE Monster using template system."""
+    """CFE Monster using template system with hitstop support."""
     def __init__(self, x, y, template_name):
         if template_name not in MONSTER_TEMPLATES:
             raise ValueError(f"Unknown monster template: {template_name}")
@@ -523,7 +570,7 @@ class Monster(Combatant):
         return max(1, base_damage + bonus)
 
     def attack(self, target):
-        """Monster attack with special abilities."""
+        """Monster attack with special abilities and hitstop support."""
         # Check for horde tactics
         attack_bonus = self.attack_bonus
         if "horde_tactics" in self.special_abilities:

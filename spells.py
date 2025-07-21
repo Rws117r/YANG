@@ -1,4 +1,4 @@
-# spells.py - Core Fantasy Engine Magic System (Updated)
+# spells.py - Core Fantasy Engine Magic System with visual effects integration
 import random
 from config import *
 
@@ -19,7 +19,7 @@ class Spell:
         self.save_type = save_type  # "fortitude", "reflex", "will", None
         self.save_dc = save_dc
 
-# --- Spell Effect Functions ---
+# --- Spell Effect Functions with Visual Effects ---
 
 def cast_light(caster, target, game_engine=None):
     """Creates a magical light source."""
@@ -28,7 +28,7 @@ def cast_light(caster, target, game_engine=None):
     return "You create a magical light that illuminates a 30-foot radius."
 
 def cast_magic_missile(caster, target, game_engine=None):
-    """Automatically hitting magical dart."""
+    """Automatically hitting magical dart with visual effects."""
     if not target:
         return "Magic Missile requires a target!"
     
@@ -37,6 +37,8 @@ def cast_magic_missile(caster, target, game_engine=None):
     
     if game_engine:
         game_engine.add_message(f"Magic missile hits {target.name} for {damage} force damage!", COLOR_PURPLE)
+        # Note: Visual effects are handled in the engine's cast_targeted_spell method
+        print(f"[SPELL VFX] Magic missile hit {target.name} for {damage} damage")
     
     return f"Magic missile strikes {target.name} for {damage} force damage!"
 
@@ -63,6 +65,7 @@ def cast_sleep(caster, target, game_engine=None):
         target.sleeping = True
         if game_engine:
             game_engine.add_message(f"{target.name} falls into a magical sleep!", COLOR_PURPLE)
+            # Sleep doesn't cause damage, so no visual effects beyond the message
         return f"{target.name} falls asleep!"
     else:
         if game_engine:
@@ -81,7 +84,7 @@ def cast_invisibility(caster, target, game_engine=None):
     return f"{'You become' if not target else target.name + ' becomes'} invisible for 10 minutes."
 
 def cast_scorching_ray(caster, target, game_engine=None):
-    """Fires a ray of fire requiring an attack roll."""
+    """Fires a ray of fire requiring an attack roll with visual effects."""
     if not target:
         return "Scorching Ray requires a target!"
     
@@ -93,6 +96,7 @@ def cast_scorching_ray(caster, target, game_engine=None):
         target.take_damage(damage)
         if game_engine:
             game_engine.add_message(f"Scorching ray hits {target.name} for {damage} fire damage!", COLOR_RED)
+            print(f"[SPELL VFX] Scorching ray hit {target.name} for {damage} fire damage")
         return f"Scorching ray burns {target.name} for {damage} fire damage!"
     else:
         if game_engine:
@@ -112,6 +116,7 @@ def cast_web(caster, target, game_engine=None):
         target.restrained = True
         if game_engine:
             game_engine.add_message(f"{target.name} is caught in sticky webs!", COLOR_GREEN)
+            # Web doesn't cause damage, so no damage visual effects
         return f"{target.name} is restrained by sticky webs!"
     else:
         if game_engine:
@@ -119,7 +124,7 @@ def cast_web(caster, target, game_engine=None):
         return f"{target.name} avoids the web."
 
 def cast_fireball(caster, target, game_engine=None):
-    """Creates a fiery explosion."""
+    """Creates a fiery explosion with dramatic visual effects."""
     if not target:
         return "Fireball requires a target area!"
     
@@ -138,6 +143,7 @@ def cast_fireball(caster, target, game_engine=None):
     
     if game_engine:
         game_engine.add_message(f"Fireball explodes! {target.name} {save_msg} ({damage} fire damage)!", COLOR_RED)
+        print(f"[SPELL VFX] Fireball hit {target.name} for {damage} fire damage - should have explosive effects")
     
     return f"Fireball deals {damage} fire damage to {target.name}!"
 
