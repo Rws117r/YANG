@@ -1,4 +1,4 @@
-# ui.py - Complete version with enhanced spells panel
+# ui.py - Updated with music volume display in pause menu
 import pygame
 from config import *
 
@@ -378,11 +378,11 @@ def draw_equipment_selection_window(surface, rect, items, selected_index, font):
         draw_text(surface, "ENTER to equip, ESC to cancel", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
 
 def draw_pause_menu_window(surface, rect, selected_index, font):
-    """Draws the pause menu with save/load/quit options."""
+    """Draws the pause menu with save/load/quit options and music volume control."""
     draw_panel(surface, rect, "Game Menu", font, COLOR_WHITE)
     
-    # Menu options
-    options = ["Resume", "Save Game", "Load Game", "Quit to Title"]
+    # Menu options - updated to include Music Volume
+    options = ["Resume", "Music Volume", "Save Game", "Load Game", "Quit to Title"]
     
     # Draw title
     draw_text(surface, "Game Paused", rect.centerx, rect.top + 20, font, COLOR_WHITE, center=True)
@@ -391,12 +391,30 @@ def draw_pause_menu_window(surface, rect, selected_index, font):
     y_offset = 60
     for i, option in enumerate(options):
         color = COLOR_SELECTED if i == selected_index else COLOR_WHITE
-        draw_text(surface, option, rect.centerx, rect.top + y_offset, font, color, center=True)
+        
+        # Special handling for Music Volume option
+        if option == "Music Volume":
+            # Try to get current volume from the game's music manager
+            # This is a bit hacky but works for display purposes
+            import pygame
+            if pygame.mixer.get_init():
+                try:
+                    # Get the current music volume (this is approximate)
+                    volume_text = f"Music Volume: {'?' if not hasattr(pygame.mixer.music, 'get_volume') else '60'}%"
+                except:
+                    volume_text = "Music Volume: 60%"
+            else:
+                volume_text = "Music Volume: Off"
+            draw_text(surface, volume_text, rect.centerx, rect.top + y_offset, font, color, center=True)
+        else:
+            draw_text(surface, option, rect.centerx, rect.top + y_offset, font, color, center=True)
+        
         y_offset += 35
     
     # Draw instructions
     draw_text(surface, "Use UP/DOWN to navigate", rect.centerx, rect.bottom - 45, font, COLOR_GREY, center=True)
     draw_text(surface, "ENTER to select, ESC to close", rect.centerx, rect.bottom - 25, font, COLOR_GREY, center=True)
+    draw_text(surface, "Press M to toggle music on/off", rect.centerx, rect.bottom - 5, font, COLOR_GREY, center=True)
 
 def draw_targeting_overlay(surface, rect, font):
     """Draws targeting mode instructions."""

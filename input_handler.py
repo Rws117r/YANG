@@ -1,9 +1,9 @@
-# input_handler.py - Handles all game input
+# input_handler.py - Updated with Music Controls
 import pygame
 from config import *
 
 class InputHandler:
-    """Handles all input for the game."""
+    """Handles all input for the game with music support."""
     
     def __init__(self, game):
         self.game = game
@@ -43,6 +43,8 @@ class InputHandler:
         if key == pygame.K_ESCAPE:
             self.game.game_state = 'pause_menu'
             self.game.pause_menu_selected_index = 0
+            # Pause music when entering pause menu
+            self.game.pause_game_music()
         elif key == pygame.K_TAB:
             self._cycle_input_focus()
         elif key == pygame.K_l:
@@ -52,6 +54,12 @@ class InputHandler:
         elif key == pygame.K_r:
             rest_msg = self.game.player.rest()
             self.game.add_message(rest_msg, COLOR_BLUE)
+        elif key == pygame.K_m:
+            # Toggle music on/off
+            if self.game.music_manager:
+                enabled = self.game.music_manager.toggle_music()
+                status = "enabled" if enabled else "disabled"
+                self.game.add_message(f"Music {status}", COLOR_BLUE)
         
         # Focus-specific input
         if self.game.input_focus == 'log':
@@ -112,8 +120,8 @@ class InputHandler:
                 self._update_spell_area()
     
     def _handle_pause_menu_input(self, key):
-        """Handle pause menu input."""
-        pause_options = ["Resume", "Save Game", "Load Game", "Quit to Title"]
+        """Handle pause menu input with music controls."""
+        pause_options = ["Resume", "Music Volume", "Save Game", "Load Game", "Quit to Title"]
         
         if key == pygame.K_UP:
             self.game.pause_menu_selected_index = max(0, self.game.pause_menu_selected_index - 1)
@@ -121,19 +129,41 @@ class InputHandler:
             self.game.pause_menu_selected_index = min(len(pause_options) - 1, self.game.pause_menu_selected_index + 1)
         elif key == pygame.K_ESCAPE:
             self.game.game_state = 'playing'
+            # Resume music when exiting pause menu
+            self.game.resume_game_music()
         elif key == pygame.K_RETURN:
             selected_option = pause_options[self.game.pause_menu_selected_index]
             
             if selected_option == "Resume":
                 self.game.game_state = 'playing'
+                # Resume music when resuming game
+                self.game.resume_game_music()
+            elif selected_option == "Music Volume":
+                # Cycle through volume levels
+                if self.game.music_manager:
+                    current_vol = self.game.music_manager.music_volume
+                    volume_levels = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+                    try:
+                        current_index = volume_levels.index(round(current_vol, 1))
+                        new_index = (current_index + 1) % len(volume_levels)
+                    except ValueError:
+                        new_index = 3  # Default to 0.6
+                    
+                    new_vol = volume_levels[new_index]
+                    self.game.music_manager.set_volume(new_vol)
+                    self.game.add_message(f"Music volume: {int(new_vol * 100)}%", COLOR_BLUE)
             elif selected_option == "Save Game":
                 message = self.game.save_game()
                 self.game.add_message(message, COLOR_GOLD)
                 self.game.game_state = 'playing'
+                self.game.resume_game_music()
             elif selected_option == "Load Game":
                 message = self.game.load_game()
                 self.game.add_message(message, COLOR_GOLD)
                 self.game.game_state = 'playing'
+                # Music will be set based on loaded location
+                if self.game.music_manager:
+                    self.game.change_music_for_area("Overworld", "overworld")
             elif selected_option == "Quit to Title":
                 self.game.running = False
     
@@ -151,9 +181,15 @@ class InputHandler:
         if key == pygame.K_RIGHT:
             new_index = (current_index + 1) % len(self.game.panel_tabs)
             self.game.active_panel = self.game.panel_tabs[new_index]
+            # Play panel switch sound
+            if self.game.audio_manager:
+                self.game.audio_manager.play_panel_switch()
         elif key == pygame.K_LEFT:
             new_index = (current_index - 1) % len(self.game.panel_tabs)
             self.game.active_panel = self.game.panel_tabs[new_index]
+            # Play panel switch sound
+            if self.game.audio_manager:
+                self.game.audio_manager.play_panel_switch()
         
         # Panel-specific input
         if self.game.active_panel == INVENTORY_ICON:
@@ -211,6 +247,9 @@ class InputHandler:
                 if spell:
                     result = self.game.player.prepare_spell(spell_name, spell.level)
                     self.game.add_message(result, COLOR_BLUE)
+                    # Play spell prepare sound
+                    if self.game.audio_manager:
+                        self.game.audio_manager.play_spell_prepare()
             elif key == pygame.K_c:
                 # Cast selected spell
                 spell_name = all_spells[self.game.spells_selected_index]
@@ -285,6 +324,10 @@ class InputHandler:
                 treasure_xp_msg = self.game.player.gain_treasure_xp(value)
                 self.game.add_message(f"You open the chest and find {treasure_item.name}!", COLOR_GOLD)
                 self.game.add_message(treasure_xp_msg, COLOR_GOLD)
+                
+                # Play item pickup sound
+                if self.game.audio_manager:
+                    self.game.audio_manager.play_item_pickup()
                 
                 if self.game.player.check_for_level_up():
                     self.game.game_state = 'level_up'
@@ -517,4 +560,10 @@ class InputHandler:
             item_to_equip = items[self.game.equip_selection_index]
             result = self.game.player.equip(item_to_equip)
             self.game.add_message(result, COLOR_WHITE)
+            # Play success sound for successful equipment
+            if self.game.audio_manager:
+                if "equip" in result.lower():
+                    self.game.audio_manager.play_success()
+                else:
+                    self.game.audio_manager.play_error()
             self.game.game_state = 'playing'

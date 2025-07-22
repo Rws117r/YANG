@@ -1,4 +1,4 @@
-# audio_system.py - Comprehensive game audio system
+# audio_system.py - Fixed comprehensive game audio system
 import pygame
 import os
 import random
@@ -12,16 +12,19 @@ class AudioManager:
         pygame.mixer.init()
         
         self.sounds = {}
+        self.movement_sounds = {}
         self.enabled = True
         self.volume = 0.7
         
         # Timing controls to prevent audio spam
         self.last_sound_time = {}
+        self.last_movement_time = {}  # Track last sound time per archetype
         self.sound_delays = {
             'combat': 100,      # Combat sounds can repeat quickly
             'ui': 50,          # UI sounds are brief
             'contextual': 500  # Contextual sounds need longer gaps
         }
+        self.movement_delay = 300  # Minimum ms between movement sounds
         
         print("[AUDIO] Audio system initialized")
         self.load_all_sounds()
@@ -47,7 +50,12 @@ class AudioManager:
             'level_up': 'level_up.wav',
             'spell_prepare': 'spell_prepare.wav',
             'error': 'error.wav',
-            'success': 'success.wav'
+            'success': 'success.wav',
+            
+            # Movement sounds
+            'heavy_footsteps': 'heavy_footsteps.wav',
+            'soft_footsteps': 'soft_footsteps.wav',
+            'staff_taps': 'staff_taps.wav'
         }
         
         # Check if sounds exist, generate if needed
@@ -73,6 +81,17 @@ class AudioManager:
             except pygame.error as e:
                 print(f"[AUDIO ERROR] Could not load {filepath}: {e}")
                 self.sounds[sound_name] = None
+        
+        # Set up movement sounds mapping
+        self.movement_sounds = {
+            "Warrior": self.sounds.get('heavy_footsteps'),
+            "Expert": self.sounds.get('soft_footsteps'),
+            "Mage": self.sounds.get('staff_taps')
+        }
+        
+        # Initialize movement timing
+        for archetype in self.movement_sounds:
+            self.last_movement_time[archetype] = 0
     
     def generate_missing_sounds(self):
         """Generate missing sound files."""
@@ -82,7 +101,7 @@ class AudioManager:
             import sys
             
             # Try to run the sound generator
-            result = subprocess.run([sys.executable, 'comprehensive_sound_generator.py'], 
+            result = subprocess.run([sys.executable, 'simple_sound_generator.py'], 
                                   capture_output=True, text=True)
             if result.returncode == 0:
                 print("[AUDIO] Successfully generated missing sounds")
@@ -144,6 +163,28 @@ class AudioManager:
         """Play hit confirmation sound."""
         # Use the attack sound as hit confirmation for now
         self.play_attack_sound(archetype)
+    
+    # ============================================
+    # MOVEMENT AUDIO METHODS
+    # ============================================
+    
+    def play_movement_sound(self, archetype, force=False):
+        """Play movement sound for the specified archetype."""
+        if not self.enabled or archetype not in self.movement_sounds:
+            return
+        
+        current_time = pygame.time.get_ticks()
+        last_time = self.last_movement_time.get(archetype, 0)
+        
+        # Check timing to prevent sound spam
+        if not force and current_time - last_time < self.movement_delay:
+            return
+        
+        sound = self.movement_sounds.get(archetype)
+        if sound:
+            sound.play()
+            self.last_movement_time[archetype] = current_time
+            print(f"[AUDIO] Playing {archetype} movement sound")
     
     # ============================================
     # CONTEXTUAL MOVEMENT AUDIO METHODS
@@ -220,6 +261,32 @@ class AudioManager:
             'total_sounds': len(self.sounds)
         }
         return info
+    
+    def get_movement_sound_info(self):
+        """Get info about loaded movement sounds for debugging."""
+        info = {}
+        for archetype, sound in self.movement_sounds.items():
+            info[archetype] = {
+                "loaded": sound is not None,
+                "last_played": self.last_movement_time.get(archetype, 0)
+            }
+        return info
+
+class MovementAudioMixin:
+    """Mixin to add movement audio to game entities."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.audio_manager = None  # Will be set by the game engine
+    
+    def play_movement_audio(self):
+        """Play movement sound based on archetype."""
+        if hasattr(self, 'archetype') and self.audio_manager:
+            self.audio_manager.play_movement_sound(self.archetype)
+    
+    def set_audio_manager(self, audio_manager):
+        """Set the audio manager reference."""
+        self.audio_manager = audio_manager
 
 # Integration functions for the main game
 def initialize_game_audio():
@@ -270,185 +337,17 @@ def test_all_sounds():
         getattr(audio_manager, f'play_{sound_key}')()
         pygame.time.wait(600)
     
+    # Test movement sounds
+    print("\n🚶 Testing Movement Sounds...")
+    for archetype in ['Warrior', 'Expert', 'Mage']:
+        print(f"   Playing {archetype} movement...")
+        audio_manager.play_movement_sound(archetype, force=True)
+        pygame.time.wait(800)
+    
     print("\n=== TEST COMPLETE ===")
 
 if __name__ == "__main__":
     # Test the audio system
     pygame.init()
     test_all_sounds()
-    pygame.quit()# audio_system.py - Game audio system with movement sounds
-import pygame
-import os
-import random
-from sound_generator import create_movement_sounds
-
-class AudioManager:
-    """Manages all game audio including movement sounds."""
-    
-    def __init__(self):
-        # Initialize pygame mixer
-        pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=1024)
-        pygame.mixer.init()
-        
-        self.sounds = {}
-        self.movement_sounds = {}
-        self.enabled = True
-        self.volume = 0.7
-        
-        # Movement sound timing
-        self.last_movement_time = {}  # Track last sound time per archetype
-        self.movement_delay = 300  # Minimum ms between movement sounds
-        
-        print("[AUDIO] Audio system initialized")
-        self.load_movement_sounds()
-    
-    def load_movement_sounds(self):
-        """Load or generate movement sounds for each archetype."""
-        sounds_dir = "sounds"
-        movement_files = {
-            "Warrior": "heavy_footsteps.wav",
-            "Expert": "soft_footsteps.wav", 
-            "Mage": "staff_taps.wav"
-        }
-        
-        # Check if sounds exist, generate if needed
-        missing_sounds = []
-        for archetype, filename in movement_files.items():
-            filepath = os.path.join(sounds_dir, filename)
-            if not os.path.exists(filepath):
-                missing_sounds.append(archetype)
-        
-        if missing_sounds:
-            print(f"[AUDIO] Generating missing movement sounds: {missing_sounds}")
-            create_movement_sounds()
-        
-        # Load all movement sounds
-        for archetype, filename in movement_files.items():
-            filepath = os.path.join(sounds_dir, filename)
-            try:
-                sound = pygame.mixer.Sound(filepath)
-                sound.set_volume(self.volume)
-                self.movement_sounds[archetype] = sound
-                self.last_movement_time[archetype] = 0
-                print(f"[AUDIO] Loaded {archetype} movement sound: {filename}")
-            except pygame.error as e:
-                print(f"[AUDIO ERROR] Could not load {filepath}: {e}")
-                self.movement_sounds[archetype] = None
-    
-    def play_movement_sound(self, archetype, force=False):
-        """Play movement sound for the specified archetype."""
-        if not self.enabled or archetype not in self.movement_sounds:
-            return
-        
-        current_time = pygame.time.get_ticks()
-        last_time = self.last_movement_time.get(archetype, 0)
-        
-        # Check timing to prevent sound spam
-        if not force and current_time - last_time < self.movement_delay:
-            return
-        
-        sound = self.movement_sounds.get(archetype)
-        if sound:
-            # Add slight pitch variation for variety
-            # Note: pygame doesn't support pitch shifting easily, so we'll just play as-is
-            sound.play()
-            self.last_movement_time[archetype] = current_time
-            print(f"[AUDIO] Playing {archetype} movement sound")
-    
-    def play_sound(self, sound_name, volume=None):
-        """Play a general game sound."""
-        if not self.enabled or sound_name not in self.sounds:
-            return
-        
-        sound = self.sounds[sound_name]
-        if volume is not None:
-            sound.set_volume(volume * self.volume)
-        sound.play()
-    
-    def set_volume(self, volume):
-        """Set master volume (0.0 to 1.0)."""
-        self.volume = max(0.0, min(1.0, volume))
-        
-        # Update all loaded sounds
-        for sound in self.movement_sounds.values():
-            if sound:
-                sound.set_volume(self.volume)
-        
-        for sound in self.sounds.values():
-            if sound:
-                sound.set_volume(self.volume)
-    
-    def toggle_audio(self):
-        """Toggle audio on/off."""
-        self.enabled = not self.enabled
-        if not self.enabled:
-            pygame.mixer.stop()  # Stop all sounds
-        return self.enabled
-    
-    def load_additional_sound(self, sound_name, filepath):
-        """Load an additional sound effect."""
-        try:
-            sound = pygame.mixer.Sound(filepath)
-            sound.set_volume(self.volume)
-            self.sounds[sound_name] = sound
-            print(f"[AUDIO] Loaded {sound_name}: {filepath}")
-        except pygame.error as e:
-            print(f"[AUDIO ERROR] Could not load {filepath}: {e}")
-    
-    def get_movement_sound_info(self):
-        """Get info about loaded movement sounds for debugging."""
-        info = {}
-        for archetype, sound in self.movement_sounds.items():
-            info[archetype] = {
-                "loaded": sound is not None,
-                "last_played": self.last_movement_time.get(archetype, 0)
-            }
-        return info
-
-class MovementAudioMixin:
-    """Mixin to add movement audio to game entities."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.audio_manager = None  # Will be set by the game engine
-    
-    def play_movement_audio(self):
-        """Play movement sound based on archetype."""
-        if hasattr(self, 'archetype') and self.audio_manager:
-            self.audio_manager.play_movement_sound(self.archetype)
-    
-    def set_audio_manager(self, audio_manager):
-        """Set the audio manager reference."""
-        self.audio_manager = audio_manager
-
-# Integration functions for the main game
-def initialize_game_audio():
-    """Initialize the game audio system."""
-    try:
-        audio_manager = AudioManager()
-        return audio_manager
-    except Exception as e:
-        print(f"[AUDIO ERROR] Failed to initialize audio: {e}")
-        return None
-
-def test_movement_sounds():
-    """Test function to play all movement sounds."""
-    print("=== TESTING MOVEMENT SOUNDS ===")
-    
-    audio_manager = AudioManager()
-    
-    archetypes = ["Warrior", "Expert", "Mage"]
-    for i, archetype in enumerate(archetypes):
-        print(f"Playing {archetype} movement sound...")
-        audio_manager.play_movement_sound(archetype, force=True)
-        
-        # Wait a bit between sounds
-        pygame.time.wait(1000)
-    
-    print("=== TEST COMPLETE ===")
-
-if __name__ == "__main__":
-    # Test the audio system
-    pygame.init()
-    test_movement_sounds()
     pygame.quit()
