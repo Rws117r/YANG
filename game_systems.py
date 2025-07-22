@@ -1,4 +1,4 @@
-# game_systems.py - Core game systems (hitstop, visual effects)
+# game_systems.py - Core game systems (hitstop, visual effects, spell preparation)
 import pygame
 import math
 import sys
@@ -117,11 +117,64 @@ class KnockbackEffect(VisualEffect):
         
         return (int(offset_x), int(offset_y))
 
+class ScreenDarkeningEffect:
+    """Manages screen darkening during spell preparation."""
+    
+    def __init__(self):
+        self.is_active = False
+        self.start_time = 0
+        self.duration = 1000
+        self.max_darkness = 0.7  # How dark to make the screen (0.0 - 1.0)
+    
+    def start(self, duration_ms):
+        """Start the screen darkening effect."""
+        self.is_active = True
+        self.start_time = pygame.time.get_ticks()
+        self.duration = duration_ms
+        print("[SCREEN DARKEN] Starting screen darkening effect")
+    
+    def end(self):
+        """End the screen darkening effect."""
+        self.is_active = False
+        print("[SCREEN DARKEN] Ending screen darkening effect")
+    
+    def update(self):
+        """Update the darkening effect."""
+        if not self.is_active:
+            return 0.0
+        
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - self.start_time
+        
+        if elapsed >= self.duration:
+            return 0.0
+        
+        # Create a smooth fade in and out
+        progress = elapsed / self.duration
+        
+        # Fade in quickly, stay dark, fade out quickly
+        if progress < 0.2:
+            # Fade in (0.0 to 1.0)
+            fade_factor = progress / 0.2
+        elif progress > 0.8:
+            # Fade out (1.0 to 0.0)
+            fade_factor = (1.0 - progress) / 0.2
+        else:
+            # Stay at full darkness
+            fade_factor = 1.0
+        
+        return self.max_darkness * fade_factor
+    
+    def get_darkness_level(self):
+        """Get current darkness level (0.0 to 1.0)."""
+        return self.update()
+
 class VisualEffectsManager:
     """Manages all visual effects for entities."""
     def __init__(self):
         self.entity_effects = {}
         self.screen_shake = ScreenShakeManager()
+        self.screen_darkening = ScreenDarkeningEffect()
     
     def add_flash_effect(self, entity, duration_ms=200):
         """Add a flash effect to an entity."""
@@ -156,6 +209,18 @@ class VisualEffectsManager:
     def add_screen_shake(self, archetype, attack_type=None):
         """Add a screen shake effect."""
         self.screen_shake.add_shake(archetype, attack_type)
+    
+    def start_screen_darkening(self, duration_ms):
+        """Start screen darkening effect."""
+        self.screen_darkening.start(duration_ms)
+    
+    def end_screen_darkening(self):
+        """End screen darkening effect."""
+        self.screen_darkening.end()
+    
+    def get_screen_darkness(self):
+        """Get current screen darkness level."""
+        return self.screen_darkening.get_darkness_level()
     
     def update(self):
         """Update all effects and remove expired ones."""

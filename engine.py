@@ -1,4 +1,4 @@
-# engine.py - Updated with Music System Integration
+# engine.py - Updated with Spell Preparation Animation System
 import pygame
 import math
 import json
@@ -12,6 +12,7 @@ from spells import get_spell_by_name, CORE_SPELLS
 from game_systems import HitstopManager, VisualEffectsManager, get_hitstop_duration
 from rendering import GameRenderer
 from input_handler import InputHandler
+from spell_preparation import SpellPreparationAnimator
 
 from audio_system import initialize_game_audio
 
@@ -167,7 +168,7 @@ class MusicManager:
         return pygame.mixer.music.get_busy()
 
 class Game:
-    """Main game engine class - now with music support."""
+    """Main game engine class - now with spell preparation animation support."""
     
     def __init__(self, screen, font, clock, player):
         self.screen = screen
@@ -197,6 +198,10 @@ class Game:
             print("[DEBUG] Music system initialized successfully")
         else:
             print("[DEBUG] Music system failed to initialize")
+        
+        # --- Spell Preparation Animation System ---
+        self.spell_prep_animator = SpellPreparationAnimator(self.vfx_manager)
+        self.spell_prep_pending = False
         
         print("[DEBUG] Core systems initialized")
         
@@ -262,6 +267,7 @@ class Game:
             ("Attack enemies to see flash, knockback & screen shake!", COLOR_WHITE),
             ("Each archetype has unique movement sounds!", COLOR_BLUE),
             ("Enjoy the atmospheric music as you explore!", COLOR_GREEN),
+            ("Mages can now prepare spells with magical animations!", COLOR_PURPLE),
         ]
 
     def add_message(self, msg, color=COLOR_WHITE):
@@ -463,6 +469,26 @@ class Game:
         self.hitstop_manager.update()
         self.vfx_manager.update()
         
+        # Update spell preparation animator
+        self.spell_prep_animator.update()
+        
+        # Handle spell preparation completion
+        if hasattr(self, 'spell_prep_pending') and self.spell_prep_pending:
+            if not self.spell_prep_animator.is_animation_active():
+                # Animation finished, now do the actual spell preparation
+                rest_msg = self.player.rest()
+                self.add_message(rest_msg, COLOR_BLUE)
+                self.add_message("Your spells are now prepared and ready to cast!", COLOR_PURPLE)
+                
+                # Play completion sound
+                if self.audio_manager:
+                    self.audio_manager.play_success()
+                
+                self.spell_prep_pending = False
+                
+                # Advance turn for monsters
+                self.monster_turns()
+        
         if not self.hitstop_manager.should_skip_update():
             self.handle_continuous_movement()
 
@@ -479,7 +505,8 @@ class Game:
             spell_area_tiles=self.spell_area_tiles,
             target_cursor=self.target_cursor,
             look_cursor=self.look_cursor,
-            game_state=self.game_state
+            game_state=self.game_state,
+            spell_prep_animator=self.spell_prep_animator  # Pass spell prep animator
         )
         
         self.renderer.draw_ui(

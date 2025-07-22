@@ -1,11 +1,11 @@
-# rendering.py - Handles all game rendering with visual effects
+# rendering.py - Handles all game rendering with visual effects and spell preparation
 import pygame
 from config import *
 from ui import *
 from game_systems import apply_flash_to_color
 
 class GameRenderer:
-    """Handles all rendering for the game with visual effects support."""
+    """Handles all rendering for the game with visual effects and spell preparation support."""
     
     def __init__(self, screen, font, vfx_manager):
         self.screen = screen
@@ -74,6 +74,14 @@ class GameRenderer:
         # Blit game surface to shaken position
         self.screen.blit(self.game_surface, shaken_rect.topleft)
         
+        # Apply screen darkening FIRST (affects everything)
+        spell_prep_animator = kwargs.get('spell_prep_animator')
+        if spell_prep_animator and spell_prep_animator.is_animation_active():
+            self._apply_screen_darkening(self.screen, self.vfx_manager)
+            
+            # Re-draw player and magic circle brightly on top of darkening
+            self._draw_bright_elements_over_darkening(spell_prep_animator, player, cam_x, cam_y, shaken_rect)
+        
         # Draw effect indicators
         if is_frozen:
             hitstop_text = "HITSTOP ACTIVE"
@@ -84,9 +92,39 @@ class GameRenderer:
             shake_text = f"SCREEN SHAKE ({abs(shake_x) + abs(shake_y)}px)"
             text_surface = self.font.render(shake_text, True, COLOR_RED)
             self.screen.blit(text_surface, (shaken_rect.left + 10, shaken_rect.top + 30))
-            hitstop_text = "HITSTOP ACTIVE"
-            text_surface = self.font.render(hitstop_text, True, COLOR_WHITE)
-            self.screen.blit(text_surface, (game_rect.left + 10, game_rect.top + 10))
+    
+    def _draw_bright_elements_over_darkening(self, spell_prep_animator, player, cam_x, cam_y, game_rect):
+        """Draw player and magic circle brightly over the darkened screen."""
+        # Draw player brightly
+        if (0 <= player.x - cam_x < (game_rect.width // TILE_WIDTH) and 
+            0 <= player.y - cam_y < (game_rect.height // TILE_HEIGHT)):
+            
+            screen_x = game_rect.left + (player.x - cam_x) * TILE_WIDTH
+            screen_y = game_rect.top + (player.y - cam_y) * TILE_HEIGHT
+            
+            # Draw player character directly on screen (not game_surface)
+            draw_text(self.screen, player.char, screen_x, screen_y, 
+                     self.font, color=player.color)
+        
+        # Draw magic circle glyphs brightly
+        ring_glyphs = spell_prep_animator.get_ring_glyphs(player.x, player.y)
+        
+        for glyph_data in ring_glyphs:
+            world_x, world_y = glyph_data['x'], glyph_data['y']
+            
+            # Check if glyph is visible on screen
+            if (0 <= world_x - cam_x < (game_rect.width // TILE_WIDTH) and 
+                0 <= world_y - cam_y < (game_rect.height // TILE_HEIGHT)):
+                
+                screen_x = game_rect.left + (world_x - cam_x) * TILE_WIDTH
+                screen_y = game_rect.top + (world_y - cam_y) * TILE_HEIGHT
+                
+                # Draw the glyph directly on screen (not game_surface)
+                glyph = glyph_data['glyph']
+                color = glyph_data['color']
+                
+                draw_text(self.screen, glyph, screen_x, screen_y, 
+                         self.font, color=color)
     
     def _draw_terrain(self, game_map, map_width, map_height, cam_x, cam_y, game_rect):
         """Draw the terrain tiles."""
@@ -175,6 +213,41 @@ class GameRenderer:
                     draw_text(self.game_surface, entity.char, final_x, final_y, 
                             self.font, color=final_color)
     
+    def _draw_spell_preparation_effects(self, spell_prep_animator, player, cam_x, cam_y, game_rect):
+        """Draw spell preparation ring animation."""
+        if not spell_prep_animator or not spell_prep_animator.is_animation_active():
+            return
+        
+        # Get ring glyphs
+        ring_glyphs = spell_prep_animator.get_ring_glyphs(player.x, player.y)
+        
+        for glyph_data in ring_glyphs:
+            world_x, world_y = glyph_data['x'], glyph_data['y']
+            
+            # Check if glyph is visible on screen
+            if (0 <= world_x - cam_x < (game_rect.width // TILE_WIDTH) and 
+                0 <= world_y - cam_y < (game_rect.height // TILE_HEIGHT)):
+                
+                screen_x = (world_x - cam_x) * TILE_WIDTH
+                screen_y = (world_y - cam_y) * TILE_HEIGHT
+                
+                # Draw the glyph with magical effects
+                glyph = glyph_data['glyph']
+                color = glyph_data['color']
+                brightness = glyph_data['brightness']
+                
+                # Add glow effect for brighter glyphs
+                if brightness > 0.7:
+                    # Draw glow background
+                    glow_color = tuple(int(c * 0.3) for c in color)
+                    pygame.draw.circle(self.game_surface, glow_color, 
+                                     (screen_x + TILE_WIDTH//2, screen_y + TILE_HEIGHT//2), 
+                                     TILE_WIDTH//2 + 2)
+                
+                # Draw the main glyph
+                draw_text(self.game_surface, glyph, screen_x, screen_y, 
+                         self.font, color=color)
+    
     def _draw_look_cursor(self, look_cursor, cam_x, cam_y, game_rect):
         """Draw the look cursor."""
         if not look_cursor:
@@ -187,6 +260,19 @@ class GameRenderer:
             screen_y = (cursor_y - cam_y) * TILE_HEIGHT
             pygame.draw.rect(self.game_surface, COLOR_SELECTED, 
                            (screen_x, screen_y, TILE_WIDTH, TILE_HEIGHT), 2)
+    
+    def _apply_screen_darkening(self, screen, vfx_manager):
+        """Apply screen darkening effect during spell preparation."""
+        darkness_level = vfx_manager.get_screen_darkness()
+        
+        if darkness_level > 0:
+            # Create dark overlay
+            dark_surface = pygame.Surface(screen.get_size())
+            dark_surface.fill((0, 0, 0))
+            dark_surface.set_alpha(int(255 * darkness_level))
+            
+            # Apply to screen
+            screen.blit(dark_surface, (0, 0))
     
     def draw_ui(self, right_panel_tabs_rect, panel_tabs, active_panel, right_panel_rect, 
                 player, input_focus, equipment_selected_index, inventory_selected_index, 

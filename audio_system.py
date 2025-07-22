@@ -1,10 +1,10 @@
-# audio_system.py - Fixed comprehensive game audio system
+# audio_system.py - Fixed comprehensive game audio system with spell preparation
 import pygame
 import os
 import random
 
 class AudioManager:
-    """Manages all game audio: combat, UI, and contextual sounds."""
+    """Manages all game audio: combat, UI, contextual sounds, and spell preparation."""
     
     def __init__(self):
         # Initialize pygame mixer
@@ -92,6 +92,68 @@ class AudioManager:
         # Initialize movement timing
         for archetype in self.movement_sounds:
             self.last_movement_time[archetype] = 0
+        
+        # Load spell preparation sounds
+        self.load_spell_preparation_sounds()
+    
+    def load_spell_preparation_sounds(self):
+        """Load spell preparation sound effects."""
+        prep_sounds = {
+            'novice_prep': 'novice_prep.wav',    # Levels 1-2
+            'adept_prep': 'adept_prep.wav',      # Levels 3-4  
+            'expert_prep': 'expert_prep.wav',    # Levels 5-6
+            'master_prep': 'master_prep.wav',    # Levels 7+
+            
+            # Glyph progression sounds
+            'glyph_dot': 'glyph_dot.wav',
+            'glyph_target': 'glyph_target.wav',
+            'glyph_circle': 'glyph_circle.wav',
+            'glyph_empty_star': 'glyph_empty_star.wav',
+            'glyph_filled_star': 'glyph_filled_star.wav'
+        }
+        
+        for sound_name, filename in prep_sounds.items():
+            filepath = os.path.join("sounds", filename)
+            try:
+                if os.path.exists(filepath):
+                    sound = pygame.mixer.Sound(filepath)
+                    sound.set_volume(self.volume)
+                    self.sounds[sound_name] = sound
+                    self.last_sound_time[sound_name] = 0
+                    print(f"[AUDIO] Loaded spell prep sound: {sound_name}")
+                else:
+                    print(f"[AUDIO] Missing spell prep sound: {filepath}")
+                    self.sounds[sound_name] = None
+            except pygame.error as e:
+                print(f"[AUDIO ERROR] Could not load {filepath}: {e}")
+                self.sounds[sound_name] = None
+    
+    def play_spell_preparation_sound(self, player_level):
+        """Play appropriate spell preparation sound based on player level."""
+        if player_level <= 2:
+            sound_name = 'novice_prep'
+        elif player_level <= 4:
+            sound_name = 'adept_prep'
+        elif player_level <= 6:
+            sound_name = 'expert_prep'
+        else:
+            sound_name = 'master_prep'
+        
+        self.play_sound(sound_name, 'contextual', force=True)
+    
+    def play_glyph_progression_sound(self, glyph_type):
+        """Play sound for glyph progression during spell preparation."""
+        glyph_sound_map = {
+            '\uf444': 'glyph_dot',        # Dot (0xf444)
+            '\uf192': 'glyph_target',     # Target (0xf192)  
+            'O': 'glyph_circle',          # Circle
+            '\uea6a': 'glyph_empty_star', # Empty star (0xea6a)
+            '\uf04ce': 'glyph_filled_star' # Filled star (0xf04ce)
+        }
+        
+        sound_name = glyph_sound_map.get(glyph_type)
+        if sound_name:
+            self.play_sound(sound_name, 'ui', volume=0.3)  # Quieter than main prep sound
     
     def generate_missing_sounds(self):
         """Generate missing sound files."""
@@ -343,6 +405,13 @@ def test_all_sounds():
         print(f"   Playing {archetype} movement...")
         audio_manager.play_movement_sound(archetype, force=True)
         pygame.time.wait(800)
+    
+    # Test spell preparation sounds
+    print("\n🔮 Testing Spell Preparation Sounds...")
+    for level in [1, 3, 5, 8]:
+        print(f"   Playing level {level} preparation...")
+        audio_manager.play_spell_preparation_sound(level)
+        pygame.time.wait(1500)
     
     print("\n=== TEST COMPLETE ===")
 

@@ -1,9 +1,9 @@
-# input_handler.py - Updated with Music Controls
+# input_handler.py - Updated with Spell Preparation Animation
 import pygame
 from config import *
 
 class InputHandler:
-    """Handles all input for the game with music support."""
+    """Handles all input for the game with spell preparation and music support."""
     
     def __init__(self, game):
         self.game = game
@@ -52,8 +52,25 @@ class InputHandler:
             self.game.look_cursor = (self.game.player.x, self.game.player.y)
             self.game.add_message("You look around. (ENTER to interact)", COLOR_SELECTED)
         elif key == pygame.K_r:
-            rest_msg = self.game.player.rest()
-            self.game.add_message(rest_msg, COLOR_BLUE)
+            # Start spell preparation animation for mages
+            if self.game.player.archetype == "Mage":
+                if not self.game.spell_prep_animator.is_animation_active():
+                    self.game.spell_prep_animator.start_preparation(self.game.player.level)
+                    
+                    # Play preparation sound
+                    if self.game.audio_manager:
+                        self.game.audio_manager.play_spell_preparation_sound(self.game.player.level)
+                    
+                    # After animation completes, handle spell preparation logic
+                    self.game.spell_prep_pending = True
+                    
+                    self.game.add_message("You begin preparing spells...", COLOR_PURPLE)
+                else:
+                    self.game.add_message("You are already preparing spells!", COLOR_GREY)
+            else:
+                # Non-mage rest (existing functionality)
+                rest_msg = self.game.player.rest()
+                self.game.add_message(rest_msg, COLOR_BLUE)
         elif key == pygame.K_m:
             # Toggle music on/off
             if self.game.music_manager:
